@@ -1,0 +1,275 @@
+/* pages/PromotionPage.css */
+.promotion-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+}
+
+.promotion-hero {
+    text-align: center;
+    padding: 80px 20px;
+    background: linear-gradient(135deg, #10B981, #059669);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.promotion-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" fill-opacity="1" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,0L1392,0C1344,0,1248,0,1152,0C1056,0,960,0,864,0C768,0,672,0,576,0C480,0,384,0,288,0C192,0,96,0,48,0L0,0Z"></path></svg>') no-repeat bottom;
+    background-size: cover;
+    opacity: 0.3;
+}
+
+.promotion-hero h1 {
+    font-size: 56px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+}
+
+.promotion-hero p {
+    font-size: 18px;
+    opacity: 0.9;
+    position: relative;
+    z-index: 1;
+}
+
+.promotion-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+}
+
+/* Tabs */
+.promotion-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+}
+
+.tab-btn {
+    padding: 12px 28px;
+    background: #2d2d3d;
+    border: none;
+    border-radius: 40px;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.tab-btn:hover {
+    background: #3d3d4d;
+    color: #e2e8f0;
+}
+
+.tab-btn.active {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+/* Promotions Grid */
+.promotions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 28px;
+    margin-bottom: 60px;
+}
+
+.promotion-card {
+    background: #1a1a2e;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid #2d2d3d;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.promotion-card:hover {
+    transform: translateY(-5px);
+    border-color: #10B981;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.promotion-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    padding: 8px 16px;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    z-index: 1;
+}
+
+.promotion-content {
+    padding: 28px;
+}
+
+.promotion-content h3 {
+    color: white;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.promotion-content p {
+    color: #94a3b8;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+
+.promotion-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 16px;
+    border-top: 1px solid #2d2d3d;
+}
+
+.promotion-date {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.promotion-detail-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    color: #10B981;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 20px;
+    transition: all 0.3s;
+}
+
+.promotion-detail-btn:hover {
+    background: rgba(16, 185, 129, 0.1);
+    transform: translateX(5px);
+}
+
+/* Member Benefits */
+.member-benefits {
+    background: linear-gradient(135deg, #1a1a2e, #2d2d3d);
+    border-radius: 28px;
+    padding: 48px;
+    margin-top: 20px;
+    border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.benefits-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 48px;
+    color: white;
+}
+
+.benefits-header h2 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 32px;
+}
+
+.benefit-card {
+    text-align: center;
+    padding: 28px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 20px;
+    transition: all 0.3s;
+}
+
+.benefit-card:hover {
+    background: rgba(255, 107, 107, 0.1);
+    transform: translateY(-5px);
+}
+
+.benefit-icon {
+    font-size: 56px;
+    margin-bottom: 20px;
+}
+
+.benefit-card h4 {
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.benefit-card p {
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 60px;
+    color: #94a3b8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .promotion-hero h1 {
+        font-size: 36px;
+    }
+
+    .promotions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .promotion-content h3 {
+        font-size: 18px;
+    }
+
+    .member-benefits {
+        padding: 28px 20px;
+    }
+
+    .benefits-header h2 {
+        font-size: 24px;
+    }
+
+    .benefits-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .promotion-footer {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}
