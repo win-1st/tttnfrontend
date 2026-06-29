@@ -1,6 +1,6 @@
 // pages/customer/MenuPage.js
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Coffee, UtensilsCrossed, Cake, Pizza, Beer, Wine, GlassWater } from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import './MenuPage.css';
 
@@ -14,9 +14,25 @@ const MenuPage = () => {
 
     // Phân trang
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10; // 10 items per page (2 rows of 5)
+    const itemsPerPage = 10;
 
     const API_BASE_URL = 'http://localhost:8080';
+
+    // Category icons mapping
+    const getCategoryIcon = (category) => {
+        const icons = {
+            'Đồ uống': <GlassWater size={16} />,
+            'Nước ngọt': <GlassWater size={16} />,
+            'Bia': <Beer size={16} />,
+            'Rượu': <Wine size={16} />,
+            'Món ăn': <UtensilsCrossed size={16} />,
+            'Khai vị': <UtensilsCrossed size={16} />,
+            'Món chính': <Pizza size={16} />,
+            'Tráng miệng': <Cake size={16} />,
+            'Cà phê': <Coffee size={16} />
+        };
+        return icons[category] || <UtensilsCrossed size={16} />;
+    };
 
     useEffect(() => {
         fetchProducts();
@@ -123,7 +139,7 @@ const MenuPage = () => {
             }
             return `${API_BASE_URL}${product.image}`;
         }
-        return 'https://via.placeholder.com/300x200/1a1a2e/ff6b6b?text=No+Image';
+        return 'https://via.placeholder.com/300x200/f8fafc/64748b?text=No+Image';
     };
 
     const filteredProducts = products.filter(product => {
@@ -160,7 +176,7 @@ const MenuPage = () => {
     };
 
     return (
-        <div className="customer-menu-page">
+        <div className="menu-page">
             <div className="menu-hero">
                 <h1>Thực đơn</h1>
                 <p>Đa dạng món ăn, thức uống phục vụ mọi nhu cầu</p>
@@ -184,6 +200,7 @@ const MenuPage = () => {
                                 className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
                                 onClick={() => setSelectedCategory(cat)}
                             >
+                                {cat !== 'all' && getCategoryIcon(cat)}
                                 {cat === 'all' ? 'Tất cả' : cat}
                             </button>
                         ))}
@@ -207,7 +224,7 @@ const MenuPage = () => {
                                             src={getImageUrl(product)}
                                             alt={product.name}
                                             onError={(e) => {
-                                                e.target.src = 'https://via.placeholder.com/300x200/1a1a2e/ff6b6b?text=No+Image';
+                                                e.target.src = 'https://via.placeholder.com/300x200/f8fafc/64748b?text=No+Image';
                                             }}
                                         />
                                         <div className="product-info">

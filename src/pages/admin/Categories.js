@@ -1,8 +1,9 @@
-// Categories.js - Đã sửa lỗi thiếu thẻ đóng
+// Categories.js - Đã sửa để khớp với backend (dùng FormData)
 import React, { useEffect, useState } from 'react';
-import { FolderTree, Search, Plus, RefreshCw, X, Edit2, Trash2, Upload } from 'lucide-react';
+import { FolderTree, Search, Plus, RefreshCw, X, Edit2, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function Categories({ categories, setCategories, refreshTrigger, setRefreshTrigger }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -11,17 +12,23 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
     const [editingCategory, setEditingCategory] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
-        description: '',
-        imageUrl: '',
-        imageFile: null
+        description: ''
     });
-    const [imagePreview, setImagePreview] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [toast, setToast] = useState(null);
     const navigate = useNavigate();
 
     const API_BASE_URL = 'http://localhost:8080';
 
     const getToken = () => localStorage.getItem('token');
+
+    // Hàm hiển thị toast
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
 
     // Fetch tất cả danh mục từ API
     const fetchCategories = async () => {
@@ -44,6 +51,7 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
             }
         } catch (error) {
             console.error('Lỗi tải danh mục:', error);
+            showToast('Không thể tải danh sách danh mục!', 'error');
             if (error.response?.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -63,46 +71,12 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
         if (refreshTrigger) fetchCategories();
     }, [refreshTrigger]);
 
-    // Xử lý chọn file ảnh
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (!file.type.startsWith('image/')) {
-                alert('Vui lòng chọn file ảnh (jpg, png, gif, ...)');
-                return;
-            }
-
-            if (file.size > 5 * 1024 * 1024) {
-                alert('Kích thước ảnh không được vượt quá 5MB');
-                return;
-            }
-
-            setFormData({
-                ...formData,
-                imageFile: file,
-                imageUrl: ''
-            });
-
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    // Xóa ảnh đã chọn
-    const clearImage = () => {
-        setFormData({ ...formData, imageFile: null, imageUrl: '' });
-        setImagePreview('');
-    };
-
-    // Thêm danh mục mới
+    // Thêm danh mục mới - Dùng FormData để khớp với backend
     const handleCreate = async (e) => {
         e.preventDefault();
 
         if (!formData.name.trim()) {
-            alert('Vui lòng nhập tên danh mục');
+            showToast('Vui lòng nhập tên danh mục', 'warning');
             return;
         }
 
@@ -115,15 +89,11 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
         }
 
         try {
+            // Tạo FormData để gửi lên backend
             const formDataToSend = new FormData();
             formDataToSend.append('name', formData.name.trim());
             formDataToSend.append('description', formData.description || '');
-
-            if (formData.imageFile) {
-                formDataToSend.append('image', formData.imageFile);
-            } else if (formData.imageUrl) {
-                formDataToSend.append('imageUrl', formData.imageUrl);
-            }
+            // Không gửi imageUrl và image vì đã bỏ chọn hình
 
             const response = await axios.post(`${API_BASE_URL}/api/categories`, formDataToSend, {
                 headers: {
@@ -133,28 +103,28 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
             });
 
             if (response.data?.success) {
-                alert('Thêm danh mục thành công!');
+                showToast(`✅ Thêm danh mục "${formData.name}" thành công!`, 'success');
                 resetModal();
                 fetchCategories();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Thêm thất bại!');
+                showToast(response.data?.message || 'Thêm thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi thêm danh mục:', error);
             const errorMsg = error.response?.data?.message || error.response?.data || 'Thêm danh mục thất bại!';
-            alert(errorMsg);
+            showToast(errorMsg, 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Sửa danh mục
+    // Sửa danh mục - Dùng FormData để khớp với backend
     const handleUpdate = async (e) => {
         e.preventDefault();
 
         if (!formData.name.trim()) {
-            alert('Vui lòng nhập tên danh mục');
+            showToast('Vui lòng nhập tên danh mục', 'warning');
             return;
         }
 
@@ -167,15 +137,11 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
         }
 
         try {
+            // Tạo FormData để gửi lên backend
             const formDataToSend = new FormData();
             formDataToSend.append('name', formData.name.trim());
             formDataToSend.append('description', formData.description || '');
-
-            if (formData.imageFile) {
-                formDataToSend.append('image', formData.imageFile);
-            } else if (formData.imageUrl) {
-                formDataToSend.append('imageUrl', formData.imageUrl);
-            }
+            // Không gửi imageUrl và image vì đã bỏ chọn hình
 
             const response = await axios.put(`${API_BASE_URL}/api/categories/${editingCategory.id}`, formDataToSend, {
                 headers: {
@@ -185,16 +151,16 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
             });
 
             if (response.data?.success) {
-                alert('Cập nhật danh mục thành công!');
+                showToast(`✅ Cập nhật danh mục "${formData.name}" thành công!`, 'success');
                 resetModal();
                 fetchCategories();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Cập nhật thất bại!');
+                showToast(response.data?.message || 'Cập nhật thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi cập nhật danh mục:', error);
-            alert('Cập nhật thất bại!');
+            showToast('Cập nhật thất bại!', 'error');
         } finally {
             setSubmitting(false);
         }
@@ -216,20 +182,20 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
             });
 
             if (response.data?.success) {
-                alert('Xóa danh mục thành công!');
+                showToast(`✅ Xóa danh mục "${name}" thành công!`, 'success');
                 fetchCategories();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Xóa thất bại!');
+                showToast(response.data?.message || 'Xóa thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi xóa danh mục:', error);
             if (error.response?.status === 403) {
-                alert('Bạn không có quyền xóa danh mục!');
+                showToast('Bạn không có quyền xóa danh mục!', 'error');
             } else if (error.response?.status === 409) {
-                alert('Không thể xóa danh mục vì đang có sản phẩm liên quan!');
+                showToast('Không thể xóa danh mục vì đang có sản phẩm liên quan!', 'warning');
             } else {
-                alert('Xóa thất bại!');
+                showToast('Xóa thất bại!', 'error');
             }
         }
     };
@@ -239,11 +205,8 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
         setEditingCategory(category);
         setFormData({
             name: category.name || '',
-            description: category.description || '',
-            imageUrl: category.imageUrl || '',
-            imageFile: null
+            description: category.description || ''
         });
-        setImagePreview(category.imageUrl || '');
         setShowModal(true);
     };
 
@@ -253,11 +216,8 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
         setEditingCategory(null);
         setFormData({
             name: '',
-            description: '',
-            imageUrl: '',
-            imageFile: null
+            description: ''
         });
-        setImagePreview('');
     };
 
     // Đóng modal
@@ -287,6 +247,25 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
 
     return (
         <div>
+            {/* Toast Notification */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
@@ -294,7 +273,7 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
                     <p style={{ color: '#94a3b8' }}>Tổng số: {categories.length} danh mục</p>
                 </div>
                 <button
-                    onClick={() => { setShowModal(true); setEditingCategory(null); setFormData({ name: '', description: '', imageUrl: '', imageFile: null }); setImagePreview(''); }}
+                    onClick={() => { setShowModal(true); setEditingCategory(null); setFormData({ name: '', description: '' }); }}
                     style={{ padding: '12px 24px', background: '#ff6b6b', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
                     <Plus size={18} /> Thêm danh mục
@@ -336,17 +315,7 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
                             <tr key={c.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
                                 <td style={{ padding: '16px', color: 'white' }}>{c.id}</td>
                                 <td style={{ padding: '16px', color: 'white', fontWeight: '500' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                        {c.imageUrl && (
-                                            <img
-                                                src={`${API_BASE_URL}${c.imageUrl}`}
-                                                alt={c.name}
-                                                style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
-                                                onError={(e) => { e.target.style.display = 'none' }}
-                                            />
-                                        )}
-                                        <span>{c.name}</span>
-                                    </div>
+                                    <span>{c.name}</span>
                                 </td>
                                 <td style={{ padding: '16px', color: '#94a3b8', maxWidth: '300px' }}>{c.description || '-'}</td>
                                 <td style={{ padding: '16px', textAlign: 'center' }}>
@@ -449,73 +418,6 @@ export default function Categories({ categories, setCategories, refreshTrigger, 
                                     disabled={submitting}
                                     style={{ width: '100%', padding: '12px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '10px', color: 'white', fontSize: '14px', resize: 'vertical', outline: 'none' }}
                                 />
-                            </div>
-
-                            {/* Upload ảnh */}
-                            <div style={{ marginBottom: '20px' }}>
-                                <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
-                                    Hình ảnh
-                                </label>
-
-                                {imagePreview && (
-                                    <div style={{ marginBottom: '12px', position: 'relative', display: 'inline-block' }}>
-                                        <img
-                                            src={imagePreview}
-                                            alt="Preview"
-                                            style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover', border: '2px solid #2d2d3d' }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={clearImage}
-                                            disabled={submitting}
-                                            style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#ff6b6b', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        >
-                                            <X size={14} color="white" />
-                                        </button>
-                                    </div>
-                                )}
-
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <label style={{
-                                        padding: '10px 16px',
-                                        background: '#2d2d3d',
-                                        color: '#94a3b8',
-                                        border: '1px solid #3d3d4d',
-                                        borderRadius: '8px',
-                                        cursor: submitting ? 'not-allowed' : 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        fontSize: '14px'
-                                    }}>
-                                        <Upload size={16} />
-                                        Chọn ảnh từ máy
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={handleImageChange}
-                                            disabled={submitting}
-                                            style={{ display: 'none' }}
-                                        />
-                                    </label>
-
-                                    <span style={{ color: '#64748B', fontSize: '12px' }}>hoặc</span>
-
-                                    <input
-                                        type="text"
-                                        value={formData.imageUrl}
-                                        onChange={(e) => {
-                                            setFormData({ ...formData, imageUrl: e.target.value, imageFile: null });
-                                            setImagePreview(e.target.value);
-                                        }}
-                                        placeholder="Nhập URL ảnh"
-                                        disabled={submitting}
-                                        style={{ flex: 1, padding: '10px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }}
-                                    />
-                                </div>
-                                <p style={{ color: '#64748B', fontSize: '12px', marginTop: '8px' }}>
-                                    Hỗ trợ: JPG, PNG, GIF (tối đa 5MB)
-                                </p>
                             </div>
 
                             <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>

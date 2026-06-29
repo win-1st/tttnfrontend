@@ -1,6 +1,11 @@
-// pages/PromotionPage.js - Sửa lại
+// pages/PromotionPage.js
 import React, { useState, useEffect } from 'react';
-import { Gift, Calendar, Tag, Clock, ChevronRight } from 'lucide-react';
+import {
+    Gift, Calendar, Tag, Clock, ChevronRight,
+    Percent, Sparkles, Star, Award, Cake,
+    Smartphone, Trophy, Zap, ShoppingBag,
+    CheckCircle, Clock as ClockIcon, AlertCircle
+} from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import './PromotionPage.css';
 
@@ -16,7 +21,6 @@ const PromotionPage = () => {
     const fetchPromotions = async () => {
         setLoading(true);
         try {
-            // Gọi API lấy khuyến mãi đang hoạt động
             const response = await axiosClient.get('/promotions/active');
             console.log('Promotions response:', response.data);
 
@@ -47,15 +51,21 @@ const PromotionPage = () => {
 
     // Format loại giảm giá - Dựa vào cấu trúc dữ liệu thực tế
     const formatDiscount = (promotion) => {
-        if (promotion.discountPercent) {
-            return `Giảm ${promotion.discountPercent}%`;
+        // Kiểm tra discountPercentage từ model
+        if (promotion.discountPercentage) {
+            return `Giảm ${promotion.discountPercentage}%`;
         }
+        // Kiểm tra discountAmount từ model
         if (promotion.discountAmount) {
             return `Giảm ${promotion.discountAmount.toLocaleString('vi-VN')}đ`;
         }
+        // Kiểm tra discountPercent
+        if (promotion.discountPercent) {
+            return `Giảm ${promotion.discountPercent}%`;
+        }
         // Nếu có discountValue
         if (promotion.discountValue) {
-            if (promotion.discountType === 'PERCENTAGE') {
+            if (promotion.discountType === 'PERCENTAGE' || promotion.discountType === 'PERCENT') {
                 return `Giảm ${promotion.discountValue}%`;
             }
             return `Giảm ${promotion.discountValue.toLocaleString('vi-VN')}đ`;
@@ -63,7 +73,7 @@ const PromotionPage = () => {
         return 'Ưu đãi đặc biệt';
     };
 
-    // Lấy tên khuyến mãi - có thể là name hoặc title
+    // Lấy tên khuyến mãi
     const getPromotionName = (promotion) => {
         return promotion.name || promotion.title || promotion.promotionName || 'Khuyến mãi';
     };
@@ -73,19 +83,29 @@ const PromotionPage = () => {
         return promotion.description || promotion.promoDescription || 'Ưu đãi hấp dẫn dành cho bạn';
     };
 
+    // Lấy icon cho khuyến mãi
+    const getPromotionIcon = (promotion) => {
+        const discount = promotion.discountPercentage || promotion.discountPercent || 0;
+        if (discount > 0) {
+            return <Percent size={20} />;
+        }
+        if (promotion.discountAmount > 0) {
+            return <Gift size={20} />;
+        }
+        return <Sparkles size={20} />;
+    };
+
     // Kiểm tra khuyến mãi có đang diễn ra không
     const isPromotionActive = (promotion) => {
         const now = new Date();
 
-        // Nếu có startDate và endDate
         if (promotion.startDate && promotion.endDate) {
             const startDate = new Date(promotion.startDate);
             const endDate = new Date(promotion.endDate);
-            return promotion.isActive && now >= startDate && now <= endDate;
+            return promotion.isActive !== false && now >= startDate && now <= endDate;
         }
 
-        // Nếu chỉ có isActive
-        return promotion.isActive === true;
+        return promotion.isActive !== false;
     };
 
     // Lọc khuyến mãi theo tab
@@ -94,25 +114,38 @@ const PromotionPage = () => {
             return isPromotionActive(promo);
         }
         if (activeTab === 'upcoming') {
-            // Sắp diễn ra: chưa đến ngày bắt đầu
             if (promo.startDate) {
                 const now = new Date();
                 const startDate = new Date(promo.startDate);
-                return now < startDate && promo.isActive;
+                return now < startDate && promo.isActive !== false;
             }
             return false;
         }
-        return true; // all
+        return true;
     });
+
+    // Benefits data
+    const benefits = [
+        { icon: <Cake size={28} />, title: 'Quà sinh nhật', desc: 'Nhận ngay voucher 100k vào tháng sinh nhật' },
+        { icon: <Star size={28} />, title: 'Tích điểm thưởng', desc: 'Tích lũy điểm đổi quà và voucher giảm giá' },
+        { icon: <Gift size={28} />, title: 'Quà tặng đặc biệt', desc: 'Nhận quà tặng khi đạt cấp độ thành viên mới' },
+        { icon: <Smartphone size={28} />, title: 'Ưu đãi độc quyền', desc: 'Nhận thông báo ưu đãi sớm nhất qua app' }
+    ];
 
     if (loading) {
         return (
             <div className="promotion-page">
                 <div className="promotion-hero">
-                    <h1>Khuyến mãi & Ưu đãi</h1>
+                    <h1>
+                        <Tag size={32} className="hero-icon" />
+                        Khuyến mãi & Ưu đãi
+                    </h1>
                     <p>Những ưu đãi hấp dẫn dành riêng cho bạn</p>
                 </div>
-                <div className="loading-spinner">Đang tải ưu đãi...</div>
+                <div className="loading-spinner">
+                    <div className="spinner"></div>
+                    <p>Đang tải ưu đãi...</p>
+                </div>
             </div>
         );
     }
@@ -120,7 +153,10 @@ const PromotionPage = () => {
     return (
         <div className="promotion-page">
             <div className="promotion-hero">
-                <h1>Khuyến mãi & Ưu đãi</h1>
+                <h1>
+                    <Tag size={32} className="hero-icon" />
+                    Khuyến mãi & Ưu đãi
+                </h1>
                 <p>Những ưu đãi hấp dẫn dành riêng cho bạn</p>
             </div>
 
@@ -131,27 +167,30 @@ const PromotionPage = () => {
                         className={`tab-btn ${activeTab === 'active' ? 'active' : ''}`}
                         onClick={() => setActiveTab('active')}
                     >
+                        <Zap size={16} />
                         Đang diễn ra
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'upcoming' ? 'active' : ''}`}
                         onClick={() => setActiveTab('upcoming')}
                     >
+                        <ClockIcon size={16} />
                         Sắp diễn ra
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
                         onClick={() => setActiveTab('all')}
                     >
+                        <ShoppingBag size={16} />
                         Tất cả
                     </button>
                 </div>
 
                 {filteredPromotions.length === 0 ? (
                     <div className="empty-promotions">
-                        <Gift size={48} style={{ opacity: 0.3 }} />
-                        <p>Hiện chưa có chương trình khuyến mãi nào</p>
-                        <p style={{ fontSize: '14px', marginTop: '8px' }}>
+                        <Gift size={56} className="empty-icon" />
+                        <p className="empty-title">Hiện chưa có chương trình khuyến mãi nào</p>
+                        <p className="empty-subtitle">
                             Vui lòng quay lại sau để cập nhật ưu đãi mới nhất
                         </p>
                     </div>
@@ -160,7 +199,7 @@ const PromotionPage = () => {
                         {filteredPromotions.map(promo => (
                             <div key={promo.id} className="promotion-card">
                                 <div className="promotion-badge">
-                                    <Tag size={16} />
+                                    {getPromotionIcon(promo)}
                                     <span>{formatDiscount(promo)}</span>
                                 </div>
                                 <div className="promotion-content">
@@ -179,9 +218,15 @@ const PromotionPage = () => {
                                         </div>
                                         <div className="promotion-status">
                                             {isPromotionActive(promo) ? (
-                                                <span className="status-active">● Đang diễn ra</span>
+                                                <span className="status-active">
+                                                    <CheckCircle size={12} />
+                                                    Đang diễn ra
+                                                </span>
                                             ) : (
-                                                <span className="status-upcoming">○ Sắp diễn ra</span>
+                                                <span className="status-upcoming">
+                                                    <ClockIcon size={12} />
+                                                    Sắp diễn ra
+                                                </span>
                                             )}
                                         </div>
                                     </div>
@@ -194,30 +239,19 @@ const PromotionPage = () => {
                 {/* Member benefits */}
                 <div className="member-benefits">
                     <div className="benefits-header">
-                        <Gift size={32} />
+                        <Award size={32} className="benefits-icon" />
                         <h2>Đặc quyền thành viên</h2>
                     </div>
                     <div className="benefits-grid">
-                        <div className="benefit-card">
-                            <div className="benefit-icon">🎂</div>
-                            <h4>Quà sinh nhật</h4>
-                            <p>Nhận ngay voucher 100k vào tháng sinh nhật</p>
-                        </div>
-                        <div className="benefit-card">
-                            <div className="benefit-icon">⭐</div>
-                            <h4>Tích điểm thưởng</h4>
-                            <p>Tích lũy điểm đổi quà và voucher giảm giá</p>
-                        </div>
-                        <div className="benefit-card">
-                            <div className="benefit-icon">🎁</div>
-                            <h4>Quà tặng đặc biệt</h4>
-                            <p>Nhận quà tặng khi đạt cấp độ thành viên mới</p>
-                        </div>
-                        <div className="benefit-card">
-                            <div className="benefit-icon">📱</div>
-                            <h4>Ưu đãi độc quyền</h4>
-                            <p>Nhận thông báo ưu đãi sớm nhất qua app</p>
-                        </div>
+                        {benefits.map((benefit, index) => (
+                            <div key={index} className="benefit-card">
+                                <div className="benefit-icon-wrapper">
+                                    {benefit.icon}
+                                </div>
+                                <h4>{benefit.title}</h4>
+                                <p>{benefit.desc}</p>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>

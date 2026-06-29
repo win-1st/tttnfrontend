@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Package, RefreshCw, Plus, X, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, Filter } from 'lucide-react';
+import {
+    Package, RefreshCw, Plus, X, ArrowDown, ArrowUp,
+    ChevronLeft, ChevronRight, Search, Filter,
+    ShoppingBag, Box, Clock, User, Hash,
+    Calendar, AlertCircle, CheckCircle, TrendingUp,
+    Truck, Clipboard, List, Grid, DollarSign
+} from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function Inventory() {
     const [transactions, setTransactions] = useState([]);
@@ -10,32 +17,57 @@ export default function Inventory() {
     const [showImportModal, setShowImportModal] = useState(false);
     const [importForm, setImportForm] = useState({ productId: '', quantity: 0, note: '' });
     const [submitting, setSubmitting] = useState(false);
+    const [toast, setToast] = useState(null);
 
     // Search state
     const [searchTerm, setSearchTerm] = useState('');
-    const [searchField, setSearchField] = useState('all'); // all, product, type, note, user
-    const [transactionTypeFilter, setTransactionTypeFilter] = useState('all'); // all, IMPORT, EXPORT, ADJUSTMENT
+    const [searchField, setSearchField] = useState('all');
+    const [transactionTypeFilter, setTransactionTypeFilter] = useState('all');
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [totalPages, setTotalPages] = useState(1);
 
+    // Hàm hiển thị toast
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
+
     useEffect(() => {
         fetchTransactions();
         fetchProducts();
     }, []);
 
-    // Filter transactions when search term or filters change
     useEffect(() => {
         filterTransactions();
     }, [searchTerm, searchField, transactionTypeFilter, transactions]);
 
-    // Update pagination when filtered transactions change
     useEffect(() => {
         setTotalPages(Math.ceil(filteredTransactions.length / itemsPerPage));
         setCurrentPage(1);
     }, [filteredTransactions, itemsPerPage]);
+
+    const getTransactionTypeIcon = (type) => {
+        switch (type) {
+            case 'IMPORT': return <ArrowDown size={14} color="#10B981" />;
+            case 'EXPORT': return <ArrowUp size={14} color="#EF4444" />;
+            case 'ADJUSTMENT': return <RefreshCw size={14} color="#8B5CF6" />;
+            default: return <Package size={14} />;
+        }
+    };
+
+    const getTransactionTypeText = (type) => {
+        switch (type) {
+            case 'IMPORT': return 'Nhập kho';
+            case 'EXPORT': return 'Xuất kho';
+            case 'ADJUSTMENT': return 'Điều chỉnh';
+            default: return type;
+        }
+    };
 
     const fetchTransactions = async () => {
         setLoading(true);
@@ -47,6 +79,7 @@ export default function Inventory() {
             }
         } catch (err) {
             console.error('Lỗi:', err);
+            showToast('Không thể tải danh sách giao dịch!', 'error');
         } finally {
             setLoading(false);
         }
@@ -62,16 +95,13 @@ export default function Inventory() {
         }
     };
 
-    // Filter transactions based on search term and filters
     const filterTransactions = () => {
         let filtered = [...transactions];
 
-        // Filter by transaction type
         if (transactionTypeFilter !== 'all') {
             filtered = filtered.filter(tx => tx.transactionType === transactionTypeFilter);
         }
 
-        // Filter by search term
         if (searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase().trim();
             filtered = filtered.filter(tx => {
@@ -79,16 +109,16 @@ export default function Inventory() {
                     case 'product':
                         return tx.product?.name?.toLowerCase().includes(term);
                     case 'type':
-                        const typeText = tx.transactionType === 'IMPORT' ? 'nhập' : tx.transactionType === 'EXPORT' ? 'xuất' : 'điều chỉnh';
+                        const typeText = getTransactionTypeText(tx.transactionType).toLowerCase();
                         return typeText.includes(term);
                     case 'note':
                         return tx.note?.toLowerCase().includes(term);
                     case 'user':
                         return tx.user?.fullName?.toLowerCase().includes(term);
-                    default: // all
+                    default:
                         return (
                             tx.product?.name?.toLowerCase().includes(term) ||
-                            (tx.transactionType === 'IMPORT' ? 'nhập' : tx.transactionType === 'EXPORT' ? 'xuất' : 'điều chỉnh').includes(term) ||
+                            getTransactionTypeText(tx.transactionType).toLowerCase().includes(term) ||
                             tx.note?.toLowerCase().includes(term) ||
                             tx.user?.fullName?.toLowerCase().includes(term) ||
                             tx.id?.toString().includes(term)
@@ -100,11 +130,10 @@ export default function Inventory() {
         setFilteredTransactions(filtered);
     };
 
-    // Nhập kho
     const handleImport = async (e) => {
         e.preventDefault();
         if (!importForm.productId || importForm.quantity <= 0) {
-            alert('Vui lòng chọn sản phẩm và số lượng!');
+            showToast('Vui lòng chọn sản phẩm và số lượng!', 'warning');
             return;
         }
         setSubmitting(true);
@@ -115,27 +144,28 @@ export default function Inventory() {
                 note: importForm.note || 'Nhập kho thủ công'
             });
             if (res.data?.success) {
-                alert(res.data.message || 'Nhập kho thành công!');
+                showToast(res.data.message || 'Nhập kho thành công!', 'success');
                 setShowImportModal(false);
                 setImportForm({ productId: '', quantity: 0, note: '' });
                 fetchTransactions();
                 fetchProducts();
+            } else {
+                showToast(res.data?.message || 'Nhập kho thất bại!', 'error');
             }
         } catch (err) {
-            alert('Lỗi: ' + (err.response?.data?.message || err.message));
+            const errorMsg = err.response?.data?.message || err.message || 'Có lỗi xảy ra!';
+            showToast(errorMsg, 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Get current page transactions
     const getCurrentTransactions = () => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         const endIndex = startIndex + itemsPerPage;
         return filteredTransactions.slice(startIndex, endIndex);
     };
 
-    // Pagination handlers
     const goToPage = (page) => {
         if (page >= 1 && page <= totalPages) {
             setCurrentPage(page);
@@ -159,14 +189,12 @@ export default function Inventory() {
         setCurrentPage(1);
     };
 
-    // Reset all filters
     const resetFilters = () => {
         setSearchTerm('');
         setSearchField('all');
         setTransactionTypeFilter('all');
     };
 
-    // Get page numbers to display
     const getPageNumbers = () => {
         const pages = [];
         const maxVisible = 5;
@@ -183,14 +211,50 @@ export default function Inventory() {
         return pages;
     };
 
-    if (loading) return <div style={{ padding: 20, color: '#94a3b8' }}>Đang tải...</div>;
+    if (loading) return (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+            <div style={{ width: '40px', height: '40px', border: '4px solid #2d2d3d', borderTop: '4px solid #ff6b6b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
+            <p>Đang tải dữ liệu...</p>
+            <style>{`
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
+        </div>
+    );
 
     const currentTransactions = getCurrentTransactions();
 
     return (
         <div>
+            {/* Toast Notification */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-                <h2 style={{ fontSize: 24, fontWeight: 700, color: '#ff6b6b' }}>📦 Quản lý Kho</h2>
+                <div>
+                    <h2 style={{ fontSize: 24, fontWeight: 700, color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Package size={24} /> Quản lý Kho
+                    </h2>
+                    <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <List size={14} /> Tổng số giao dịch: {transactions.length}
+                    </p>
+                </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={fetchTransactions} style={btnSecondary}>
                         <RefreshCw size={18} /> Làm mới
@@ -210,7 +274,6 @@ export default function Inventory() {
                 marginBottom: 20
             }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-                    {/* Search Field Selector */}
                     <div style={{ minWidth: 140 }}>
                         <label style={labelStyle}>Tìm theo</label>
                         <select
@@ -226,7 +289,6 @@ export default function Inventory() {
                         </select>
                     </div>
 
-                    {/* Search Input */}
                     <div style={{ flex: 1, minWidth: 250 }}>
                         <label style={labelStyle}>Tìm kiếm</label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -261,7 +323,6 @@ export default function Inventory() {
                         </div>
                     </div>
 
-                    {/* Transaction Type Filter */}
                     <div style={{ minWidth: 160 }}>
                         <label style={labelStyle}>Loại giao dịch</label>
                         <select
@@ -270,13 +331,12 @@ export default function Inventory() {
                             style={selectStyle}
                         >
                             <option value="all">Tất cả</option>
-                            <option value="IMPORT">📥 Nhập kho</option>
-                            <option value="EXPORT">📤 Xuất kho</option>
-                            <option value="ADJUSTMENT">🔄 Điều chỉnh</option>
+                            <option value="IMPORT">Nhập kho</option>
+                            <option value="EXPORT">Xuất kho</option>
+                            <option value="ADJUSTMENT">Điều chỉnh</option>
                         </select>
                     </div>
 
-                    {/* Reset Button */}
                     {(searchTerm || transactionTypeFilter !== 'all') && (
                         <button
                             onClick={resetFilters}
@@ -298,8 +358,7 @@ export default function Inventory() {
                     )}
                 </div>
 
-                {/* Search Results Info */}
-                {searchTerm || transactionTypeFilter !== 'all' ? (
+                {(searchTerm || transactionTypeFilter !== 'all') ? (
                     <div style={{
                         marginTop: 16,
                         padding: '8px 12px',
@@ -347,7 +406,7 @@ export default function Inventory() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid #2d2d3d', background: '#0f0f1a' }}>
-                            <th style={th}>ID</th>
+                            <th style={th}><Hash size={12} /> ID</th>
                             <th style={th}>Sản phẩm</th>
                             <th style={th}>Loại</th>
                             <th style={th}>SL</th>
@@ -363,18 +422,25 @@ export default function Inventory() {
                             currentTransactions.map(tx => (
                                 <tr key={tx.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
                                     <td style={td}>#{tx.id}</td>
-                                    <td style={{ ...td, color: 'white', fontWeight: 500 }}>{tx.product?.name || '-'}</td>
+                                    <td style={{ ...td, color: 'white', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Package size={14} color="#64748B" /> {tx.product?.name || '-'}
+                                    </td>
                                     <td style={td}>
                                         <span style={badgeStyle(tx.transactionType)}>
-                                            {tx.transactionType === 'IMPORT' ? '📥 Nhập' : tx.transactionType === 'EXPORT' ? '📤 Xuất' : '🔄 ĐC'}
+                                            {getTransactionTypeIcon(tx.transactionType)}
+                                            {getTransactionTypeText(tx.transactionType)}
                                         </span>
                                     </td>
                                     <td style={{ ...td, color: 'white', fontWeight: 600 }}>{tx.quantity}</td>
                                     <td style={td}>{tx.beforeQuantity}</td>
                                     <td style={td}>{tx.afterQuantity}</td>
                                     <td style={td}>{tx.note || '-'}</td>
-                                    <td style={td}>{tx.user?.fullName || '-'}</td>
-                                    <td style={td}>{new Date(tx.createdAt).toLocaleString('vi-VN')}</td>
+                                    <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <User size={14} color="#64748B" /> {tx.user?.fullName || '-'}
+                                    </td>
+                                    <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Calendar size={14} color="#64748B" /> {new Date(tx.createdAt).toLocaleString('vi-VN')}
+                                    </td>
                                 </tr>
                             ))
                         ) : (
@@ -401,9 +467,10 @@ export default function Inventory() {
                     flexWrap: 'wrap',
                     gap: 12
                 }}>
-                    {/* Left side - Items per page */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ color: '#94a3b8', fontSize: 13 }}>Hiển thị:</span>
+                        <span style={{ color: '#94a3b8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <List size={14} /> Hiển thị:
+                        </span>
                         <select
                             value={itemsPerPage}
                             onChange={handleItemsPerPageChange}
@@ -420,7 +487,6 @@ export default function Inventory() {
                         </span>
                     </div>
 
-                    {/* Center - Page buttons */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <button
                             onClick={goToPrevPage}
@@ -449,9 +515,8 @@ export default function Inventory() {
                         </button>
                     </div>
 
-                    {/* Right side - Page info */}
-                    <div style={{ color: '#94a3b8', fontSize: 13 }}>
-                        Trang {currentPage} / {totalPages}
+                    <div style={{ color: '#94a3b8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Grid size={14} /> Trang {currentPage} / {totalPages}
                     </div>
                 </div>
             )}
@@ -461,14 +526,18 @@ export default function Inventory() {
                 <div style={overlayStyle} onClick={() => setShowImportModal(false)}>
                     <div style={modalStyle} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                            <h3 style={{ color: '#ff6b6b', fontSize: 20, margin: 0 }}>📥 Nhập kho</h3>
+                            <h3 style={{ color: '#ff6b6b', fontSize: 20, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Truck size={20} /> Nhập kho
+                            </h3>
                             <button onClick={() => setShowImportModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                                 <X size={24} />
                             </button>
                         </div>
                         <form onSubmit={handleImport}>
                             <div style={{ marginBottom: 16 }}>
-                                <label style={labelStyle}>Sản phẩm *</label>
+                                <label style={labelStyle}>
+                                    <Package size={14} style={{ display: 'inline', marginRight: 4 }} /> Sản phẩm *
+                                </label>
                                 <select
                                     value={importForm.productId}
                                     onChange={(e) => setImportForm({ ...importForm, productId: e.target.value })}
@@ -483,7 +552,9 @@ export default function Inventory() {
                                 </select>
                             </div>
                             <div style={{ marginBottom: 16 }}>
-                                <label style={labelStyle}>Số lượng *</label>
+                                <label style={labelStyle}>
+                                    <Box size={14} style={{ display: 'inline', marginRight: 4 }} /> Số lượng *
+                                </label>
                                 <input
                                     type="number"
                                     min="1"
@@ -494,7 +565,9 @@ export default function Inventory() {
                                 />
                             </div>
                             <div style={{ marginBottom: 20 }}>
-                                <label style={labelStyle}>Ghi chú</label>
+                                <label style={labelStyle}>
+                                    <Clipboard size={14} style={{ display: 'inline', marginRight: 4 }} /> Ghi chú
+                                </label>
                                 <input
                                     type="text"
                                     value={importForm.note}
@@ -505,7 +578,7 @@ export default function Inventory() {
                             </div>
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <button type="button" onClick={() => setShowImportModal(false)} style={btnCancel}>
-                                    Hủy
+                                    <X size={16} /> Hủy
                                 </button>
                                 <button type="submit" disabled={submitting} style={btnConfirm}>
                                     {submitting ? 'Đang xử lý...' : 'Xác nhận nhập'}
@@ -519,7 +592,7 @@ export default function Inventory() {
     );
 }
 
-// Styles
+// ========== STYLES ==========
 const th = { padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' };
 const td = { padding: '12px 16px', color: '#94a3b8', fontSize: 13, whiteSpace: 'nowrap' };
 
@@ -576,11 +649,15 @@ const btnConfirm = {
 };
 
 const badgeStyle = (type) => ({
-    padding: '4px 8px',
+    padding: '4px 10px',
     borderRadius: 20,
     fontSize: 11,
+    fontWeight: 600,
     background: type === 'IMPORT' ? 'rgba(16,185,129,0.1)' : type === 'EXPORT' ? 'rgba(239,68,68,0.1)' : 'rgba(139,92,246,0.1)',
-    color: type === 'IMPORT' ? '#10B981' : type === 'EXPORT' ? '#EF4444' : '#8B5CF6'
+    color: type === 'IMPORT' ? '#10B981' : type === 'EXPORT' ? '#EF4444' : '#8B5CF6',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4
 });
 
 const overlayStyle = {

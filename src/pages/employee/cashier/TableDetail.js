@@ -38,19 +38,16 @@ import {
     Hash,
     MapPin,
     UserCheck,
-
     Coffee,
     Grid,
-
-    RefreshCw,
-
+    RefreshCw
 } from "lucide-react";
 import axiosClient from "../../../services/axiosClient";
 
 import PaymentMethodModal from "./PaymentMethodModal";
 import ToastNotification from "./ToastNotification";
 import CashPaymentModal from "./CashPaymentModal";
-
+import webSocketService from '../../../services/websocketService';
 import styles from "./TableDetail.module.css";
 
 const API_BASE_URL = "http://localhost:8080";
@@ -94,7 +91,6 @@ const TableDetail = () => {
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
     const [promotionProductsMap, setPromotionProductsMap] = useState({});
 
-    // Fetch tất cả khuyến mãi đang hoạt động và sản phẩm của chúng
     const fetchPromotionsWithProducts = useCallback(async () => {
         try {
             const token = getToken();
@@ -102,14 +98,12 @@ const TableDetail = () => {
 
             console.log("=== FETCH PROMOTIONS WITH PRODUCTS ===");
 
-            // Lấy tất cả khuyến mãi đang hoạt động
             const response = await axiosClient.get('/promotions/active');
             const activePromotions = response.data?.data || [];
             console.log("Active promotions:", activePromotions);
 
             const map = {};
 
-            // Với mỗi khuyến mãi, lấy danh sách sản phẩm
             for (const promo of activePromotions) {
                 console.log(`Fetching products for promotion ${promo.id} - ${promo.name}`);
                 const productRes = await axiosClient.get(`/promotions/${promo.id}/products`, {
@@ -118,7 +112,6 @@ const TableDetail = () => {
                 const products = productRes.data?.data || [];
                 console.log(`Products in promotion ${promo.name}:`, products);
 
-                // Lưu thông tin giảm giá cho từng sản phẩm
                 products.forEach(product => {
                     if (!map[product.id]) {
                         map[product.id] = [];
@@ -165,11 +158,9 @@ const TableDetail = () => {
         }
     }, []);
 
-    // Hàm tích điểm khi thanh toán (gọi thêm API cộng điểm)
     const addPointsForCustomer = async (phone, totalAmount) => {
         try {
-            // Tính điểm: ví dụ 1000đ = 1 điểm
-            const pointsToAdd = Math.floor(totalAmount / 1000);
+            const pointsToAdd = Math.floor(totalAmount / 10000);
 
             if (pointsToAdd > 0) {
                 await axiosClient.post('/customer-points/add-points', {
@@ -182,9 +173,7 @@ const TableDetail = () => {
             console.error("Lỗi cộng điểm:", err);
         }
     };
-    // =========================
-    // HELPER FUNCTIONS
-    // =========================
+
     const handleCartMenuToggle = () => {
         setShowCartMenu(!showCartMenu);
     };
@@ -192,6 +181,7 @@ const TableDetail = () => {
     const handleCloseCartMenu = () => {
         setShowCartMenu(false);
     };
+
     const getToken = () => localStorage.getItem("token");
 
     const isTokenValid = () => {
@@ -216,10 +206,6 @@ const TableDetail = () => {
         }
         return true;
     };
-
-    // =========================
-    // TIME FORMATTING
-    // =========================
 
     const getDetailedPlayTime = useCallback((startTime, endTime = null) => {
         if (!startTime) return { text: "0 giây", seconds: 0 };
@@ -266,17 +252,12 @@ const TableDetail = () => {
         return minutes * pricePerMinute;
     }, [order?.startTime, order?.timeBasedProduct, order?.status, order?.tableFee]);
 
-    // =========================
-    // TOAST
-    // =========================
-
     const showToast = useCallback((message, type = "info", duration = 2000) => {
         const id = Date.now();
         console.log(`Adding toast: "${message}", id: ${id}, duration: ${duration}ms`);
 
         setToasts((prev) => [...prev, { id, message, type, duration }]);
 
-        // Tự động xóa toast sau duration (QUAN TRỌNG)
         setTimeout(() => {
             console.log(`Auto removing toast: ${id}`);
             setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -292,9 +273,38 @@ const TableDetail = () => {
             return newToasts;
         });
     };
-    // =========================
-    // FETCH TABLE INFO
-    // =========================
+
+
+    useEffect(() => {
+        const token = getToken();
+        if (!token) return;
+
+        const connectWS = async () => {
+            try {
+                await webSocketService.connect(token);
+
+                webSocketService.setTableStatusCallback((data) => {
+                    console.log('📡 TableDetail received table status:', data);
+
+                    if (entity && data.tableId === entity.id) {
+                        setEntity(prev => ({
+                            ...prev,
+                            status: data.status || prev.status
+                        }));
+                    }
+                });
+
+            } catch (error) {
+                console.error('TableDetail WebSocket error:', error);
+            }
+        };
+
+        connectWS();
+
+        return () => {
+            webSocketService.setTableStatusCallback(null);
+        };
+    }, [entity?.id]);
 
     useEffect(() => {
         const loadTable = async () => {
@@ -321,10 +331,6 @@ const TableDetail = () => {
         loadTable();
     }, [id, state, navigate, showToast]);
 
-    // =========================
-    // FETCH PRODUCTS
-    // =========================
-
     const fetchProducts = useCallback(async () => {
         if (!checkAuthAndRedirect()) return;
         try {
@@ -341,10 +347,6 @@ const TableDetail = () => {
             setLoading(false);
         }
     }, [navigate, showToast]);
-
-    // =========================
-    // FETCH ACTIVE ORDER & CART
-    // =========================
 
     const fetchActiveOrder = useCallback(async () => {
         if (!entity?.id) return;
@@ -413,6 +415,7 @@ const TableDetail = () => {
 
         return discountedPrice;
     };
+
     const getDiscountedPriceForProduct = (product) => {
         const originalPrice = product.productTypeCode === "TIME_BASED"
             ? product.pricePerMinute || 0
@@ -438,6 +441,7 @@ const TableDetail = () => {
             promotionName: promo.promotionName
         };
     };
+
     useEffect(() => {
         if (!entity?.id) return;
         if (!checkAuthAndRedirect()) return;
@@ -446,9 +450,6 @@ const TableDetail = () => {
         fetchPromotions();
         fetchPromotionsWithProducts();
     }, [entity?.id, fetchProducts, fetchActiveOrder, fetchPromotions, fetchPromotionsWithProducts]);
-    // =========================
-    // FORCE RE-RENDER MỖI GIÂY (REALTIME)
-    // =========================
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -456,10 +457,6 @@ const TableDetail = () => {
         }, 1000);
         return () => clearInterval(interval);
     }, []);
-
-    // =========================
-    // TOTALS
-    // =========================
 
     const cartTotal = useMemo(() => {
         return cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
@@ -481,7 +478,6 @@ const TableDetail = () => {
         return order.items.reduce((sum, item) => sum + item.quantity, 0);
     }, [order?.items]);
 
-    // Real-time clock update
     useEffect(() => {
         let interval = null;
 
@@ -513,10 +509,6 @@ const TableDetail = () => {
         return orderFoodTotal;
     }, [order, currentTotal, orderFoodTotal, tick]);
 
-    // =========================
-    // CART FUNCTIONS - LOCAL ONLY
-    // =========================
-
     const addToCart = (product) => {
         if (order?.status === "PAID") {
             showToast("Đơn hàng đã thanh toán, không thể thêm món", "warning");
@@ -538,21 +530,18 @@ const TableDetail = () => {
             }
         }
 
-        // Giá gốc
         const originalPrice = product.productTypeCode === "TIME_BASED"
             ? product.pricePerMinute || 0
             : product.price || 0;
 
-        // 🆕 Tính giá sau khuyến mãi
         const discountedPrice = calculateDiscountedPrice(product, originalPrice);
 
-        // Hiển thị thông báo nếu có giảm giá
         const hasDiscount = discountedPrice < originalPrice;
         if (hasDiscount) {
             const promotions = promotionProductsMap[product.id];
             const promoName = promotions?.[0]?.promotionName || 'Khuyến mãi';
             const savedAmount = originalPrice - discountedPrice;
-            showToast(`🎉 ${product.name} được giảm ${savedAmount.toLocaleString("vi-VN")}đ (${promoName})`, "success", 2000);
+            showToast(`${product.name} được giảm ${savedAmount.toLocaleString("vi-VN")}đ (${promoName})`, "success", 2000);
         }
 
         setCart(prev => {
@@ -566,8 +555,8 @@ const TableDetail = () => {
             return [...prev, {
                 id: product.id,
                 name: product.name,
-                price: discountedPrice, // 🆕 Giá sau khuyến mãi
-                originalPrice: originalPrice, // 🆕 Lưu giá gốc để hiển thị
+                price: discountedPrice,
+                originalPrice: originalPrice,
                 discountApplied: hasDiscount,
                 quantity: 1,
                 productTypeCode: product.productTypeCode,
@@ -600,10 +589,6 @@ const TableDetail = () => {
         showToast("Đã xóa món khỏi giỏ", "info", 1000);
     };
 
-    // =========================
-    // CREATE NEW ORDER
-    // =========================
-
     const handleConfirmOrder = async () => {
         if (!checkAuthAndRedirect()) return;
 
@@ -624,19 +609,15 @@ const TableDetail = () => {
             const createResponse = await axiosClient.post(`/orders/open-table/${entity.id}`, {});
             const newOrder = createResponse.data;
 
-            // 🆕 Phân biệt TIME_BASED và FOOD/DRINK
             for (const item of cart) {
                 if (item.isTimeBased) {
-                    // TIME_BASED: KHÔNG gửi unitPrice
                     await axiosClient.post(`/orders/${newOrder.id}/items`, null, {
                         params: {
                             productId: item.id,
                             quantity: item.quantity
-                            // KHÔNG có unitPrice
                         }
                     });
                 } else {
-                    // FOOD/DRINK: Gửi unitPrice là giá đã giảm
                     await axiosClient.post(`/orders/${newOrder.id}/items`, null, {
                         params: {
                             productId: item.id,
@@ -662,10 +643,6 @@ const TableDetail = () => {
         }
     };
 
-    // =========================
-    // UPDATE EXISTING ORDER
-    // =========================
-
     const handleUpdateOrder = async () => {
         if (!order) {
             showToast("Không có đơn hàng để cập nhật", "warning");
@@ -674,23 +651,20 @@ const TableDetail = () => {
 
         const timeBasedInCart = cart.find(item => item.isTimeBased);
 
-        // 🆕 Thêm TIME_BASED mới (nếu chưa có)
         if (timeBasedInCart && !order.timeBasedProduct) {
             try {
                 setIsConfirming(true);
-                // KHÔNG gửi unitPrice
                 await axiosClient.post(`/orders/${order.id}/items`, null, {
                     params: {
                         productId: timeBasedInCart.id,
                         quantity: 1
-                        // KHÔNG có unitPrice
                     }
                 });
 
                 setCart(prev => prev.filter(item => !item.isTimeBased));
 
                 await fetchActiveOrder();
-                showToast(`Đã thêm dịch vụ tính giờ vào đơn! Bắt đầu tính giờ.`, "success");
+                showToast("Đã thêm dịch vụ tính giờ vào đơn! Bắt đầu tính giờ.", "success");
                 return;
             } catch (err) {
                 showToast(err.response?.data?.message || "Không thể thêm dịch vụ tính giờ", "error");
@@ -699,7 +673,6 @@ const TableDetail = () => {
             }
         }
 
-        // ========== XỬ LÝ FOOD/DRINK ==========
         const currentCartMap = new Map();
         cart.filter(item => !item.isTimeBased).forEach(item => {
             currentCartMap.set(item.id, item.quantity);
@@ -752,13 +725,11 @@ const TableDetail = () => {
                 }
             });
 
-            // Thêm mới hoặc cập nhật FOOD/DRINK với unitPrice
             for (const item of cart.filter(item => !item.isTimeBased)) {
                 const existing = existingItemsMap.get(item.id);
                 const cartItem = cart.find(c => c.id === item.id);
 
                 if (!existing) {
-                    // Thêm mới với unitPrice
                     await axiosClient.post(`/orders/${order.id}/items`, null, {
                         params: {
                             productId: item.id,
@@ -767,7 +738,6 @@ const TableDetail = () => {
                         }
                     });
                 } else if (existing.quantity !== item.quantity) {
-                    // Cập nhật số lượng - gửi unitPrice
                     await axiosClient.put(`/orders/${order.id}/items/${existing.orderItemId}`, null, {
                         params: {
                             quantity: item.quantity,
@@ -778,7 +748,6 @@ const TableDetail = () => {
                 existingItemsMap.delete(item.id);
             }
 
-            // Xóa các item không còn trong cart
             for (const [productId, existing] of existingItemsMap) {
                 await axiosClient.delete(`/orders/${order.id}/items/${existing.orderItemId}`);
             }
@@ -792,10 +761,6 @@ const TableDetail = () => {
             setIsConfirming(false);
         }
     };
-
-    // =========================
-    // ORDER ACTIONS
-    // =========================
 
     const handleFinishPlaying = async () => {
         if (!order?.id) return;
@@ -838,10 +803,8 @@ const TableDetail = () => {
                 await axiosClient.patch(`/orders/${order.id}/finish`, {});
             }
 
-            // Include promotion info in payment
             const paymentParams = { orderId, method: paymentMethod };
 
-            // 🆕 Gửi promotionId nếu có chọn khuyến mãi
             if (selectedPromotion) {
                 paymentParams.promotionId = selectedPromotion.id;
                 console.log("Sending promotionId:", selectedPromotion.id);
@@ -857,11 +820,6 @@ const TableDetail = () => {
 
             console.log("Payment response:", response.data);
 
-            // Tích điểm cho khách hàng nếu có số điện thoại
-            if (customerPhone && finalTotal > 0) {
-                await addPointsForCustomer(customerPhone, finalTotal);
-            }
-
             setOrder(null);
             setCart([]);
             setSelectedPromotion(null);
@@ -876,10 +834,6 @@ const TableDetail = () => {
             setIsPaying(false);
         }
     };
-
-    // =========================
-    // PRINT BILL
-    // =========================
 
     const printBill = () => {
         if (!order) {
@@ -934,10 +888,6 @@ const TableDetail = () => {
         printWindow.document.write(billHTML);
         printWindow.document.close();
     };
-
-    // =========================
-    // FILTERED PRODUCTS
-    // =========================
 
     const filteredProducts = useMemo(() => {
         return products
@@ -1069,7 +1019,6 @@ const TableDetail = () => {
                                 })
                                 .map((product) => {
                                     const discountInfo = getDiscountedPriceForProduct(product);
-                                    // Lấy giá hiển thị: nếu có giảm giá thì lấy giá đã giảm, không thì lấy giá gốc
                                     const displayPrice = discountInfo ? discountInfo.discountedPrice :
                                         (product.productTypeCode === "TIME_BASED" ? product.pricePerMinute : product.price);
 
@@ -1081,10 +1030,9 @@ const TableDetail = () => {
                                         >
                                             {product.productTypeCode === "TIME_BASED" && (
                                                 <div className={styles.timeBasedBadge}>
-                                                    <Timer size={12} /> Tính giờ
+                                                    <Clock size={12} /> Tính giờ
                                                 </div>
                                             )}
-                                            {/* Bỏ badge giảm giá */}
                                             <img
                                                 src={product.imageUrl?.startsWith("http") ? product.imageUrl : `${API_BASE_URL}${product.imageUrl || ""}`}
                                                 alt={product.name}
@@ -1093,7 +1041,6 @@ const TableDetail = () => {
                                             />
                                             <div className={styles.productInfo}>
                                                 <h4 className={styles.productName}>{product.name}</h4>
-                                                {/* Chỉ hiển thị giá, không hiển thị giá gốc */}
                                                 <p className={styles.productPrice}>
                                                     <DollarSign size={12} />
                                                     {displayPrice?.toLocaleString("vi-VN")}đ
@@ -1129,7 +1076,6 @@ const TableDetail = () => {
                                 onChange={(e) => {
                                     const phone = e.target.value;
                                     setCustomerPhone(phone);
-                                    // Debounce để tránh gọi API quá nhiều
                                     if (phone.length >= 10) {
                                         const timeoutId = setTimeout(() => {
                                             searchCustomerByPhone(phone);
@@ -1143,7 +1089,6 @@ const TableDetail = () => {
                                 className={styles.phoneInput}
                             />
 
-                            {/* Hiển thị thông tin khách hàng */}
                             {customerInfo && (
                                 <div className={styles.customerInfoCard}>
                                     <div className={styles.customerInfoRow}>
@@ -1200,7 +1145,7 @@ const TableDetail = () => {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => setSelectedPromotion(null)}  // 🆕 Bỏ điều kiện if (!order)
+                                        onClick={() => setSelectedPromotion(null)}
                                         className={styles.removePromoBtn}
                                     >
                                         <X size={14} />
@@ -1222,7 +1167,7 @@ const TableDetail = () => {
                     {order?.status === "WAITING_PAYMENT" && order?.tableFee > 0 && (
                         <div className={styles.feeDisplay}>
                             <span className={styles.feeLabel}>
-                                <Timer size={16} /> Phí dịch vụ tính giờ:
+                                <Clock size={16} /> Phí dịch vụ tính giờ:
                             </span>
                             <span className={styles.feeAmount}>
                                 {order.tableFee.toLocaleString("vi-VN")}đ
@@ -1254,7 +1199,7 @@ const TableDetail = () => {
                                     <div key={item.id} className={styles.cartItem}>
                                         <div className={styles.cartItemHeader}>
                                             <span className={styles.cartItemName}>
-                                                {item.isTimeBased && <Timer size={14} className={styles.timeBasedIcon} />}
+                                                {item.isTimeBased && <Clock size={14} className={styles.timeBasedIcon} />}
                                                 {item.name}
                                                 {item.discountApplied && (
                                                     <span className={styles.discountBadge}>
@@ -1271,7 +1216,6 @@ const TableDetail = () => {
                                                     <>
                                                         {item.discountApplied ? (
                                                             <>
-
                                                                 <span className={styles.discountedPrice}>
                                                                     {((item.price || 0) * item.quantity).toLocaleString("vi-VN")}đ
                                                                 </span>
@@ -1447,7 +1391,6 @@ const TableDetail = () => {
                         </div>
 
                         <div className={styles.modalBody}>
-                            {/* Hiển thị thời gian hiện tại */}
                             <div className={styles.currentTimeDisplay}>
                                 <div className={styles.currentTimeLabel}>
                                     <Calendar size={16} /> Thời gian hiện tại:
@@ -1457,7 +1400,6 @@ const TableDetail = () => {
                                 </div>
                             </div>
 
-                            {/* Chọn kiểu điều chỉnh */}
                             <div className={styles.adjustTypeSection}>
                                 <label className={styles.adjustTypeLabel}>Chọn kiểu điều chỉnh:</label>
                                 <select
@@ -1475,7 +1417,7 @@ const TableDetail = () => {
                                     }}
                                 >
                                     <option value="minutes">
-                                        <Timer size={14} /> Điều chỉnh theo số phút
+                                        <Clock size={14} /> Điều chỉnh theo số phút
                                     </option>
                                     <option value="datetime">
                                         <Calendar size={14} /> Chọn lại thời gian bắt đầu
@@ -1483,7 +1425,6 @@ const TableDetail = () => {
                                 </select>
                             </div>
 
-                            {/* Điều chỉnh theo phút */}
                             <div id="minutesInput" className={styles.minutesInput}>
                                 <label className={styles.minutesLabel}>Số phút cần điều chỉnh:</label>
 
@@ -1562,7 +1503,6 @@ const TableDetail = () => {
                                 </button>
                             </div>
 
-                            {/* Chọn lại thời gian bắt đầu */}
                             <div id="datetimeInput" className={styles.datetimeInput}>
                                 <label className={styles.datetimeLabel}>Chọn thời gian bắt đầu mới:</label>
                                 <input

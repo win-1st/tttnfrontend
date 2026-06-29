@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, PlusCircle, Clock } from "lucide-react";
+import {
+    CheckCircle, XCircle, PlusCircle, Clock,
+    Table, Users, Timer, DollarSign, Calendar,
+    Shield, Star, Crown, Wrench, Coffee,
+    LayoutGrid, RefreshCw, AlertCircle,
+    Circle, CircleDot, CircleOff, Grid,
+    Home, Settings, Bell, LogOut
+} from "lucide-react";
 import axiosClient from "../../../services/axiosClient";
-
 
 const TablesPage = () => {
     const [tables, setTables] = useState([]);
@@ -10,7 +16,6 @@ const TablesPage = () => {
     const navigate = useNavigate();
     const intervalRef = useRef(null);
 
-    // Format thời gian - chỉ hiển thị giờ:phút:giây
     const formatTimeOnly = (dateTimeString) => {
         if (!dateTimeString) return null;
 
@@ -29,7 +34,6 @@ const TablesPage = () => {
         }
     };
 
-    // Tính thời gian đã trôi qua (chỉ phút và giây)
     const getElapsedTime = (startTime) => {
         if (!startTime) return "";
 
@@ -47,7 +51,6 @@ const TablesPage = () => {
         return `${minutes} phút ${seconds} giây`;
     };
 
-    // Fetch tất cả bàn
     const fetchTables = async () => {
         try {
             setLoading(true);
@@ -72,7 +75,6 @@ const TablesPage = () => {
         }
     };
 
-    // Khởi tạo dữ liệu
     useEffect(() => {
         fetchTables();
 
@@ -83,17 +85,14 @@ const TablesPage = () => {
         };
     }, []);
 
-    // Timer realtime - cập nhật UI mỗi giây mà không gọi API
     useEffect(() => {
-        // Chỉ chạy timer nếu có bàn OCCUPIED
         const hasOccupiedTables = tables.some(table => table.status === "OCCUPIED");
 
         if (hasOccupiedTables) {
             if (!intervalRef.current) {
                 intervalRef.current = setInterval(() => {
-                    // Force re-render để cập nhật elapsed time
                     setTables(prevTables => [...prevTables]);
-                }, 1000); // Cập nhật mỗi 1 giây
+                }, 1000);
             }
         } else {
             if (intervalRef.current) {
@@ -108,7 +107,7 @@ const TablesPage = () => {
                 intervalRef.current = null;
             }
         };
-    }, [tables]); // Re-run khi tables thay đổi
+    }, [tables]);
 
     const handleTableClick = (table) => {
         navigate(`/cashier/tables/${table.id}`, {
@@ -132,7 +131,34 @@ const TablesPage = () => {
         return "#ef4444";
     };
 
-    // Lấy tên hiển thị của bàn
+    const getStatusIcon = (status) => {
+        if (status === "FREE") return <CheckCircle size={14} />;
+        if (status === "RESERVED") return <Clock size={14} />;
+        if (status === "MAINTENANCE") return <Wrench size={14} />;
+        if (status === "WAITING_PAYMENT") return <DollarSign size={14} />;
+        return <XCircle size={14} />;
+    };
+
+    const getTableIcon = (status) => {
+        if (status === "FREE") return <Table size={40} color="#10b981" />;
+        if (status === "RESERVED") return <Calendar size={40} color="#f59e0b" />;
+        if (status === "MAINTENANCE") return <Wrench size={40} color="#6b7280" />;
+        if (status === "WAITING_PAYMENT") return <DollarSign size={40} color="#f59e0b" />;
+        return <Users size={40} color="#ef4444" />;
+    };
+
+    const getTypeBadge = (type) => {
+        if (type === "VIP") return <Star size={14} color="#F59E0B" />;
+        if (type === "PREMIUM") return <Crown size={14} color="#8B5CF6" />;
+        return <Coffee size={14} color="#64748B" />;
+    };
+
+    const getTypeText = (type) => {
+        if (type === "VIP") return "VIP";
+        if (type === "PREMIUM") return "Premium";
+        return "Tiêu chuẩn";
+    };
+
     const getTableDisplayName = (table) => {
         if (table.tableName) {
             return table.tableName;
@@ -151,15 +177,40 @@ const TablesPage = () => {
                 borderRadius: "16px",
                 padding: "20px",
                 marginBottom: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "12px"
             }}>
-                <h2 style={{ margin: 0, color: "#2c3e2f" }}>Quản lý bàn</h2>
-                <p style={{ margin: "8px 0 0", color: "#8a9b8c", fontSize: "14px" }}>
-                    Nhấp vào bàn để xem chi tiết hoặc thêm món
-                </p>
+                <div>
+                    <h2 style={{ margin: 0, color: "#2c3e2f", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <LayoutGrid size={24} /> Quản lý bàn
+                    </h2>
+                    <p style={{ margin: "8px 0 0", color: "#8a9b8c", fontSize: "14px" }}>
+                        Nhấp vào bàn để xem chi tiết hoặc thêm món
+                    </p>
+                </div>
+                <button
+                    onClick={fetchTables}
+                    style={{
+                        padding: "8px 16px",
+                        background: "#2c3e2f",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "13px"
+                    }}
+                >
+                    <RefreshCw size={16} /> Làm mới
+                </button>
             </div>
 
-            {/* Tables Grid */}
             {loading ? (
                 <div style={{ textAlign: "center", padding: "60px" }}>
                     <div style={{
@@ -180,6 +231,7 @@ const TablesPage = () => {
                     background: "white",
                     borderRadius: "16px"
                 }}>
+                    <AlertCircle size={48} color="#64748B" style={{ margin: "0 auto 16px" }} />
                     <p>Không có bàn nào</p>
                 </div>
             ) : (
@@ -241,10 +293,9 @@ const TablesPage = () => {
                             )}
 
                             <div style={{ fontSize: "40px", marginBottom: "8px" }}>
-                                {table.status === "FREE" ? "🍽️" : table.status === "RESERVED" ? "📅" : table.status === "MAINTENANCE" ? "🔧" : table.status === "WAITING_PAYMENT" ? "💰" : "🎱"}
+                                {getTableIcon(table.status)}
                             </div>
 
-                            {/* TÊN BÀN */}
                             <div style={{
                                 fontSize: "18px",
                                 fontWeight: "bold",
@@ -253,7 +304,6 @@ const TablesPage = () => {
                                 {getTableDisplayName(table)}
                             </div>
 
-                            {/* HIỂN THỊ SỐ BÀN */}
                             {table.tableName && table.number && (
                                 <div style={{
                                     fontSize: "11px",
@@ -267,9 +317,13 @@ const TablesPage = () => {
                             <div style={{
                                 fontSize: "12px",
                                 color: "#8a9b8c",
-                                marginTop: "4px"
+                                marginTop: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "4px"
                             }}>
-                                {table.type === "VIP" ? "🌟 VIP" : table.type === "PREMIUM" ? "⭐ Premium" : "Tiêu chuẩn"}
+                                {getTypeBadge(table.type)} {getTypeText(table.type)}
                             </div>
 
                             <div style={{
@@ -281,17 +335,10 @@ const TablesPage = () => {
                                 fontSize: "13px",
                                 color: getStatusColor(table.status)
                             }}>
-                                {table.status === "FREE" ? (
-                                    <CheckCircle size={14} />
-                                ) : table.status === "RESERVED" ? (
-                                    <Clock size={14} />
-                                ) : (
-                                    <XCircle size={14} />
-                                )}
+                                {getStatusIcon(table.status)}
                                 <span>{getStatusText(table.status)}</span>
                             </div>
 
-                            {/* HIỂN THỊ THỜI GIAN BẮT ĐẦU - REALTIME */}
                             {table.status === "OCCUPIED" && table.startTime && (
                                 <div style={{
                                     marginTop: "12px",
@@ -328,14 +375,17 @@ const TablesPage = () => {
                                         background: "rgba(255,255,255,0.6)",
                                         borderRadius: "6px",
                                         fontWeight: "bold",
-                                        fontFamily: "monospace"
+                                        fontFamily: "monospace",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: "4px"
                                     }}>
-                                        ⏱️ Đã: {getElapsedTime(table.startTime)}
+                                        <Timer size={14} /> Đã: {getElapsedTime(table.startTime)}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Hiển thị khi đang chờ thanh toán */}
                             {table.status === "WAITING_PAYMENT" && table.startTime && (
                                 <div style={{
                                     marginTop: "12px",
@@ -367,9 +417,13 @@ const TablesPage = () => {
                                     <div style={{
                                         fontSize: "11px",
                                         color: "#888",
-                                        marginTop: "6px"
+                                        marginTop: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: "4px"
                                     }}>
-                                        🧾 Chờ thanh toán
+                                        <DollarSign size={12} /> Chờ thanh toán
                                     </div>
                                 </div>
                             )}
@@ -377,9 +431,13 @@ const TablesPage = () => {
                             <div style={{
                                 fontSize: "11px",
                                 color: "#8a9b8c",
-                                marginTop: "8px"
+                                marginTop: "8px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "4px"
                             }}>
-                                Sức chứa: {table.capacity || 4} người
+                                <Users size={12} /> Sức chứa: {table.capacity || 4} người
                             </div>
                         </div>
                     ))}

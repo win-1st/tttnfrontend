@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, Search, Plus, RefreshCw, X, Edit2, Trash2, Percent, DollarSign, Calendar, Clock, Package, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+    Tag, Search, Plus, RefreshCw, X, Edit2, Trash2,
+    Percent, DollarSign, Calendar, Clock, Package, Check,
+    ChevronLeft, ChevronRight, Gift, Award, Star,
+    AlertCircle, CheckCircle, Box, List, Grid,
+    ShoppingBag, Hash, Users, TrendingUp, Filter
+} from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function Promotions({ promotions = [], setPromotions, refreshTrigger, setRefreshTrigger }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -28,12 +35,19 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
     const [promotionProducts, setPromotionProducts] = useState([]);
     const [availableProductsList, setAvailableProductsList] = useState([]);
     const [selectedProductIds, setSelectedProductIds] = useState([]);
+    const [toast, setToast] = useState(null);
     const navigate = useNavigate();
 
     const API_BASE_URL = 'http://localhost:8080';
     const getToken = () => localStorage.getItem('token');
 
-    // Fetch tất cả khuyến mãi
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
+
     const fetchPromotions = async () => {
         const token = getToken();
         if (!token) {
@@ -56,6 +70,7 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             }
         } catch (error) {
             console.error('Lỗi tải khuyến mãi:', error);
+            showToast('Không thể tải danh sách khuyến mãi!', 'error');
             if (error.response?.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -67,7 +82,6 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         }
     };
 
-    // Fetch tất cả sản phẩm
     const fetchProducts = async () => {
         const token = getToken();
         if (!token) return;
@@ -87,7 +101,6 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         }
     };
 
-    // Fetch sản phẩm trong khuyến mãi
     const fetchPromotionProducts = async (promotionId) => {
         const token = getToken();
         if (!token) return;
@@ -108,7 +121,6 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         }
     };
 
-    // Fetch sản phẩm chưa trong khuyến mãi
     const fetchAvailableProducts = async (promotionId) => {
         const token = getToken();
         if (!token) return;
@@ -141,22 +153,21 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         }
     }, [refreshTrigger]);
 
-    // Thêm khuyến mãi mới
     const handleCreate = async (e) => {
         e.preventDefault();
 
         if (!formData.name || !formData.startDate || !formData.endDate) {
-            alert('Vui lòng nhập đầy đủ tên, ngày bắt đầu và ngày kết thúc!');
+            showToast('Vui lòng nhập đầy đủ tên, ngày bắt đầu và ngày kết thúc!', 'warning');
             return;
         }
 
         if (formData.discountType === 'percentage' && (!formData.discountPercentage || formData.discountPercentage <= 0 || formData.discountPercentage > 100)) {
-            alert('Vui lòng nhập phần trăm giảm giá hợp lệ (1-100)!');
+            showToast('Vui lòng nhập phần trăm giảm giá hợp lệ (1-100)!', 'warning');
             return;
         }
 
         if (formData.discountType === 'amount' && (!formData.discountAmount || formData.discountAmount <= 0)) {
-            alert('Vui lòng nhập số tiền giảm giá hợp lệ!');
+            showToast('Vui lòng nhập số tiền giảm giá hợp lệ!', 'warning');
             return;
         }
 
@@ -193,28 +204,27 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             });
 
             if (response.data?.success) {
-                alert('Thêm khuyến mãi thành công!');
+                showToast(`Thêm khuyến mãi "${formData.name}" thành công!`, 'success');
                 resetModal();
                 fetchPromotions();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Thêm khuyến mãi thất bại!');
+                showToast(response.data?.message || 'Thêm khuyến mãi thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi thêm khuyến mãi:', error);
             const errorMsg = error.response?.data?.message || 'Thêm khuyến mãi thất bại!';
-            alert(errorMsg);
+            showToast(errorMsg, 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Sửa khuyến mãi
     const handleUpdate = async (e) => {
         e.preventDefault();
 
         if (!formData.name || !formData.startDate || !formData.endDate) {
-            alert('Vui lòng nhập đầy đủ tên, ngày bắt đầu và ngày kết thúc!');
+            showToast('Vui lòng nhập đầy đủ tên, ngày bắt đầu và ngày kết thúc!', 'warning');
             return;
         }
 
@@ -251,22 +261,21 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             });
 
             if (response.data?.success) {
-                alert('Cập nhật khuyến mãi thành công!');
+                showToast(`Cập nhật khuyến mãi "${formData.name}" thành công!`, 'success');
                 resetModal();
                 fetchPromotions();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Cập nhật thất bại!');
+                showToast(response.data?.message || 'Cập nhật thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi cập nhật khuyến mãi:', error);
-            alert('Cập nhật thất bại!');
+            showToast('Cập nhật thất bại!', 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Xóa khuyến mãi
     const handleDelete = async (id, name) => {
         if (!window.confirm(`Bạn có chắc muốn xóa khuyến mãi "${name}"?`)) return;
 
@@ -282,19 +291,18 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             });
 
             if (response.data?.success) {
-                alert('Xóa khuyến mãi thành công!');
+                showToast(`Xóa khuyến mãi "${name}" thành công!`, 'success');
                 fetchPromotions();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Xóa thất bại!');
+                showToast(response.data?.message || 'Xóa thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi xóa khuyến mãi:', error);
-            alert(error.response?.data?.message || 'Xóa khuyến mãi thất bại!');
+            showToast(error.response?.data?.message || 'Xóa khuyến mãi thất bại!', 'error');
         }
     };
 
-    // Thay đổi trạng thái
     const handleToggleStatus = async (id, currentStatus) => {
         const token = getToken();
         if (!token) {
@@ -312,18 +320,19 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             );
 
             if (response.data?.success) {
+                const statusText = !currentStatus ? 'Bật' : 'Tắt';
+                showToast(`Đã ${statusText} khuyến mãi!`, 'success');
                 fetchPromotions();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Cập nhật thất bại!');
+                showToast(response.data?.message || 'Cập nhật thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi cập nhật trạng thái:', error);
-            alert('Cập nhật thất bại!');
+            showToast('Cập nhật thất bại!', 'error');
         }
     };
 
-    // Mở modal quản lý sản phẩm
     const openProductManager = async (promotion) => {
         setCurrentPromotion(promotion);
         setSelectedProductIds([]);
@@ -333,10 +342,9 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         setShowProductModal(true);
     };
 
-    // Thêm sản phẩm vào khuyến mãi
     const handleAddProducts = async () => {
         if (selectedProductIds.length === 0) {
-            alert('Vui lòng chọn ít nhất 1 sản phẩm!');
+            showToast('Vui lòng chọn ít nhất 1 sản phẩm!', 'warning');
             return;
         }
 
@@ -358,16 +366,15 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             setSelectedProductIds([]);
             setSearchProductTerm('');
 
-            alert(`Thêm ${selectedProductIds.length} sản phẩm thành công!`);
+            showToast(`Thêm ${selectedProductIds.length} sản phẩm thành công!`, 'success');
         } catch (error) {
             console.error('Lỗi thêm sản phẩm:', error);
-            alert('Thêm sản phẩm thất bại!');
+            showToast('Thêm sản phẩm thất bại!', 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Xóa sản phẩm khỏi khuyến mãi
     const handleRemoveProduct = async (productId, productName) => {
         if (!window.confirm(`Bạn có chắc muốn xóa "${productName}" khỏi khuyến mãi?`)) return;
 
@@ -382,14 +389,13 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
             await fetchPromotionProducts(currentPromotion.id);
             await fetchAvailableProducts(currentPromotion.id);
 
-            alert('Xóa sản phẩm thành công!');
+            showToast(`Đã xóa "${productName}" khỏi khuyến mãi!`, 'success');
         } catch (error) {
             console.error('Lỗi xóa sản phẩm:', error);
-            alert('Xóa sản phẩm thất bại!');
+            showToast('Xóa sản phẩm thất bại!', 'error');
         }
     };
 
-    // Mở modal sửa
     const openEditModal = async (promotion) => {
         setEditingPromotion(promotion);
         const isPercentage = promotion.discountPercentage != null;
@@ -408,7 +414,6 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
         setShowModal(true);
     };
 
-    // Reset modal
     const resetModal = () => {
         setShowModal(false);
         setShowProductModal(false);
@@ -469,11 +474,34 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
 
     return (
         <div>
+            {/* Toast Notification */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b' }}>Quản lý Khuyến mãi</h2>
-                    <p style={{ color: '#94a3b8' }}>Tổng số: {promotionsArray.length} chương trình</p>
+                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Tag size={28} /> Quản lý Khuyến mãi
+                    </h2>
+                    <p style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <List size={14} /> Tổng số: {promotionsArray.length} chương trình
+                    </p>
                 </div>
                 <button
                     onClick={() => { setShowModal(true); setEditingPromotion(null); setFormData({ name: '', description: '', discountType: 'percentage', discountPercentage: '', discountAmount: '', startDate: '', endDate: '', isActive: true }); }}
@@ -515,7 +543,7 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                             <div style={{ flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                                    <Tag size={20} color="#ff6b6b" />
+                                    <Gift size={20} color="#ff6b6b" />
                                     <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>{promo.name}</h3>
                                     <span style={{
                                         padding: '4px 12px',
@@ -602,7 +630,7 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
 
                 {filteredPromotions.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
-                        <Tag size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                        <Gift size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
                         <p>Không tìm thấy chương trình khuyến mãi nào</p>
                     </div>
                 )}
@@ -634,8 +662,9 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
                         padding: '28px'
                     }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'white' }}>
-                                {editingPromotion ? '✏️ Sửa khuyến mãi' : '➕ Thêm khuyến mãi mới'}
+                            <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {editingPromotion ? <Edit2 size={20} color="#3B82F6" /> : <Plus size={20} color="#ff6b6b" />}
+                                {editingPromotion ? 'Sửa khuyến mãi' : 'Thêm khuyến mãi mới'}
                             </h3>
                             <button
                                 onClick={resetModal}
@@ -791,7 +820,7 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
                 </div>
             )}
 
-            {/* MODAL QUẢN LÝ SẢN PHẨM TRONG KHUYẾN MÃI */}
+            {/* MODAL QUẢN LÝ SẢN PHẨM */}
             {showProductModal && currentPromotion && (
                 <div style={{
                     position: 'fixed',
@@ -817,8 +846,8 @@ export default function Promotions({ promotions = [], setPromotions, refreshTrig
                         padding: '28px'
                     }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: 'white' }}>
-                                🏷️ Quản lý sản phẩm - {currentPromotion.name}
+                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Package size={20} /> Quản lý sản phẩm - {currentPromotion.name}
                             </h3>
                             <button
                                 onClick={resetModal}

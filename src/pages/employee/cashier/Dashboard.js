@@ -1,7 +1,28 @@
+// pages/admin/Dashboard.js
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, DollarSign, ShoppingCart, Users, Package, Table, RefreshCw, Crown, Coffee, Clock } from 'lucide-react';
+import {
+    TrendingUp,
+    ShoppingCart,
+    Package,
+    Table,
+    RefreshCw,
+    Crown,
+    Coffee,
+    Clock,
+    ArrowUp,
+    ArrowDown,
+    Wallet,
+    Smartphone,
+    CreditCard,
+    BarChart3,
+    Receipt,
+    Flame,
+    Calendar,
+    Award
+} from 'lucide-react';
 import axiosClient from '../../../services/axiosClient';
 import ToastNotification from './ToastNotification';
+import styles from './Dashboard.module.css';
 
 export default function Dashboard() {
     const [stats, setStats] = useState({
@@ -26,7 +47,6 @@ export default function Dashboard() {
         }, duration);
     };
 
-    // Lấy ngày hôm nay (đầu ngày và cuối ngày)
     const getTodayRange = () => {
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -34,7 +54,6 @@ export default function Dashboard() {
         return { startOfDay, endOfDay };
     };
 
-    // Lọc bill theo ngày hôm nay (chỉ lấy bill đã thanh toán)
     const filterTodayBills = (bills) => {
         const { startOfDay, endOfDay } = getTodayRange();
         return bills.filter(bill => {
@@ -47,48 +66,47 @@ export default function Dashboard() {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-
-            // 1. Lấy tất cả bills từ API (giống ReportPage)
-            const billsResponse = await fetch(`http://localhost:8080/api/bills/all`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            let allBills = [];
-            if (billsResponse.ok) {
-                const result = await billsResponse.json();
-                allBills = result.data || [];
+            if (!token) {
+                showToast('Vui lòng đăng nhập lại', 'error');
+                setTimeout(() => window.location.href = '/login', 1500);
+                return;
             }
-            console.log('All bills:', allBills.length);
 
-            // 2. Lọc bill của hôm nay (đã thanh toán)
+            // 1. Fetch bills using axiosClient
+            const billsResponse = await axiosClient.get('/bills/all');
+            let allBills = [];
+            if (billsResponse.data?.success && billsResponse.data?.data) {
+                allBills = billsResponse.data.data;
+            } else if (Array.isArray(billsResponse.data)) {
+                allBills = billsResponse.data;
+            } else if (billsResponse.data?.data && Array.isArray(billsResponse.data.data)) {
+                allBills = billsResponse.data.data;
+            }
+
+            console.log('📊 Total bills:', allBills.length);
+
             const todayBills = filterTodayBills(allBills);
-            console.log('Today bills (PAID):', todayBills.length);
-
-            // 3. Tính doanh thu hôm nay
             const todayRevenue = todayBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
 
-            // 4. Tính tổng doanh thu (tất cả thời gian)
             const allPaidBills = allBills.filter(bill => bill.paymentStatus === 'PAID');
             const totalRevenue = allPaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
 
-            // 5. Đơn hàng gần đây (10 bill mới nhất của hôm nay)
             const sortedTodayBills = [...todayBills].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setRecentOrders(sortedTodayBills.slice(0, 10));
 
-            // 6. Lấy các thông tin khác
+            // 2. Fetch products
             let totalProducts = 0;
-            let activeTables = 0;
-            let totalUsers = 0;
-
             try {
                 const productsRes = await axiosClient.get('/products');
                 if (productsRes.data?.data) {
                     totalProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data.length : 0;
                 }
             } catch (err) {
-                console.error('Error fetching products:', err);
+                console.error('❌ Error fetching products:', err);
             }
 
+            // 3. Fetch tables
+            let activeTables = 0;
             try {
                 const tablesRes = await axiosClient.get('/tables');
                 if (tablesRes.data?.data) {
@@ -96,20 +114,14 @@ export default function Dashboard() {
                     activeTables = tables.filter(t => t.status === 'OCCUPIED').length;
                 }
             } catch (err) {
-                console.error('Error fetching tables:', err);
+                console.error('❌ Error fetching tables:', err);
             }
 
-            try {
-                const usersRes = await axiosClient.get('/users');
-                if (usersRes.data?.data) {
-                    const users = Array.isArray(usersRes.data.data) ? usersRes.data.data : [];
-                    totalUsers = users.filter(u => u.role === 'CUSTOMER').length;
-                }
-            } catch (err) {
-                console.error('Error fetching users:', err);
-            }
+            // 4. ⚠️ BỎ QUA /users - không gọi API này nữa
+            // Đặt giá trị mặc định
+            const totalUsers = 0;
 
-            // 7. Tính growth rate (so sánh với hôm qua)
+            // 5. Calculate growth rate
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
@@ -138,12 +150,18 @@ export default function Dashboard() {
                 growthRate
             });
 
-            // 8. Tính top sản phẩm bán chạy hôm nay (giống ReportPage)
+            // 6. Calculate top products
             await calculateTodayTopProducts(todayBills, token);
 
         } catch (error) {
-            console.error('Error fetching dashboard:', error);
+            console.error('❌ Error fetching dashboard:', error);
             showToast('Không thể tải dữ liệu dashboard', 'error');
+
+            if (error.response?.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setTimeout(() => window.location.href = '/login', 1500);
+            }
         } finally {
             setLoading(false);
         }
@@ -156,12 +174,10 @@ export default function Dashboard() {
             for (const bill of todayBills) {
                 if (bill.id) {
                     try {
-                        const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
-                        if (detailResponse.ok) {
-                            const detailResult = await detailResponse.json();
-                            const items = detailResult.data?.items || [];
+                        // Sử dụng axiosClient thay vì fetch
+                        const detailResponse = await axiosClient.get(`/bills/${bill.id}`);
+                        if (detailResponse.data) {
+                            const items = detailResponse.data.data?.items || [];
                             for (const item of items) {
                                 const dishName = item.name || item.productName || 'Món ăn';
                                 const quantity = item.quantity || 1;
@@ -176,7 +192,7 @@ export default function Dashboard() {
                             }
                         }
                     } catch (err) {
-                        console.error(`Error fetching bill ${bill.id} details:`, err);
+                        console.error(`❌ Error fetching bill ${bill.id} details:`, err);
                     }
                 }
             }
@@ -185,17 +201,15 @@ export default function Dashboard() {
                 .sort((a, b) => b.revenue - a.revenue)
                 .slice(0, 5);
 
-            console.log('Top products today:', topProductsList);
             setTopProducts(topProductsList);
         } catch (error) {
-            console.error('Error calculating top products:', error);
+            console.error('❌ Error calculating top products:', error);
             setTopProducts([]);
         }
     };
 
     useEffect(() => {
         fetchDashboardData();
-        // Tự động refresh mỗi 30 giây
         const interval = setInterval(fetchDashboardData, 30000);
         return () => clearInterval(interval);
     }, []);
@@ -211,26 +225,6 @@ export default function Dashboard() {
         return date.toLocaleString('vi-VN');
     };
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'PAID': return '#10B981';
-            case 'WAITING_PAYMENT': return '#FBBF24';
-            case 'OPEN': return '#3B82F6';
-            case 'CANCELLED': return '#EF4444';
-            default: return '#64748B';
-        }
-    };
-
-    const getStatusText = (status) => {
-        switch (status) {
-            case 'PAID': return 'Đã thanh toán';
-            case 'WAITING_PAYMENT': return 'Chờ thanh toán';
-            case 'OPEN': return 'Đang chơi';
-            case 'CANCELLED': return 'Đã hủy';
-            default: return status;
-        }
-    };
-
     const getTableNumber = (bill) => {
         if (bill.tableNumber) return bill.tableNumber;
         if (bill.table?.number) return bill.table.number;
@@ -243,33 +237,94 @@ export default function Dashboard() {
         return '#64748B';
     };
 
-    // Format ngày hiện tại
     const getTodayDateString = () => {
         const today = new Date();
         return today.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     };
 
+    const getPaymentMethodIcon = (method) => {
+        switch (method) {
+            case 'CASH':
+                return <Wallet size={14} />;
+            case 'MOMO':
+                return <Smartphone size={14} />;
+            default:
+                return <CreditCard size={14} />;
+        }
+    };
+
+    const getPaymentMethodText = (method) => {
+        switch (method) {
+            case 'CASH':
+                return 'Tiền mặt';
+            case 'MOMO':
+                return 'MoMo';
+            default:
+                return 'Chuyển khoản';
+        }
+    };
+
+    const getRankIcon = (index) => {
+        switch (index) {
+            case 0:
+                return <Award size={18} className={styles.rankIconGold} />;
+            case 1:
+                return <Award size={18} className={styles.rankIconSilver} />;
+            case 2:
+                return <Award size={18} className={styles.rankIconBronze} />;
+            default:
+                return <span className={styles.rankNumber}>#{index + 1}</span>;
+        }
+    };
+
     if (loading) {
         return (
-            <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
-                <div style={{ width: '40px', height: '40px', border: '4px solid #2d2d3d', borderTop: '4px solid #ff6b6b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
-                <p>Đang tải dữ liệu...</p>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            <div className={styles.loadingContainer}>
+                <div className={styles.spinner}></div>
+                <p className={styles.loadingText}>Đang tải dữ liệu...</p>
             </div>
         );
     }
 
     const statCards = [
-        { key: 'periodRevenue', label: `Doanh thu hôm nay (${new Date().toLocaleDateString('vi-VN')})`, value: formatCurrency(stats.periodRevenue), icon: <TrendingUp size={24} />, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-        { key: 'totalOrders', label: `Đơn hàng hôm nay`, value: stats.totalOrders, icon: <ShoppingCart size={24} />, color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-        { key: 'totalProducts', label: 'Sản phẩm', value: stats.totalProducts, icon: <Package size={24} />, color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
-        { key: 'activeTables', label: 'Bàn đang dùng', value: stats.activeTables, icon: <Table size={24} />, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+        {
+            key: 'periodRevenue',
+            label: 'Doanh thu hôm nay',
+            value: formatCurrency(stats.periodRevenue),
+            icon: <TrendingUp size={28} />,
+            color: '#ff6b6b',
+            bg: 'rgba(255,107,107,0.15)'
+        },
+        {
+            key: 'totalOrders',
+            label: 'Đơn hàng hôm nay',
+            value: stats.totalOrders,
+            icon: <ShoppingCart size={28} />,
+            color: '#4CAF50',
+            bg: 'rgba(76,175,80,0.15)'
+        },
+        {
+            key: 'totalProducts',
+            label: 'Tổng sản phẩm',
+            value: stats.totalProducts,
+            icon: <Package size={28} />,
+            color: '#9C27B0',
+            bg: 'rgba(156,39,176,0.15)'
+        },
+        {
+            key: 'activeTables',
+            label: 'Bàn đang sử dụng',
+            value: stats.activeTables,
+            icon: <Table size={28} />,
+            color: '#FF9800',
+            bg: 'rgba(255,152,0,0.15)'
+        },
     ];
 
     return (
-        <div>
+        <div className={styles.container}>
             {/* Toast Container */}
-            <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className={styles.toastContainer}>
                 {toasts.map((toast) => (
                     <ToastNotification
                         key={toast.id}
@@ -281,105 +336,109 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            {/* Header */}
+            <div className={styles.header}>
                 <div>
-                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b' }}>Dashboard Hôm nay</h2>
-                    <p style={{ color: '#94a3b8', fontSize: '14px' }}>
-                        {getTodayDateString()} - Dữ liệu được cập nhật theo thời gian thực
+                    <h1 className={styles.mainTitle}>
+                        <BarChart3 size={32} className={styles.titleIcon} />
+                        Tổng quan
+                    </h1>
+                    <p className={styles.subTitle}>
+                        <Calendar size={14} className={styles.calendarIcon} />
+                        {getTodayDateString()} • <span className={styles.timeUpdate}>Cập nhật: {new Date().toLocaleTimeString('vi-VN')}</span>
                     </p>
                 </div>
-                <button
-                    onClick={fetchDashboardData}
-                    style={{ padding: '10px 20px', background: '#2d2d3d', border: 'none', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                    <RefreshCw size={16} /> Làm mới
+                <button onClick={fetchDashboardData} className={styles.refreshButton}>
+                    <RefreshCw size={18} className={styles.refreshIcon} />
+                    Làm mới
                 </button>
             </div>
+
             {/* Stats Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+            <div className={styles.statsGrid}>
                 {statCards.map(card => (
-                    <div key={card.key} style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', padding: '20px', transition: 'transform 0.3s' }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={card.key} className={styles.statCard}>
+                        <div className={styles.statContent}>
                             <div>
-                                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '8px' }}>{card.label}</p>
-                                <h3 style={{ fontSize: '28px', fontWeight: '700', color: card.color }}>{card.value}</h3>
+                                <p className={styles.statLabel}>{card.label}</p>
+                                <h3 className={styles.statValue} style={{ color: card.color }}>
+                                    {card.value}
+                                </h3>
                             </div>
-                            <div style={{
-                                width: '48px',
-                                height: '48px',
-                                background: card.bg,
-                                borderRadius: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
+                            <div className={styles.statIcon} style={{ background: card.bg, color: card.color }}>
                                 {card.icon}
                             </div>
                         </div>
+                        {card.key === 'periodRevenue' && stats.growthRate !== 0 && (
+                            <div className={styles.growthBadge}>
+                                {stats.growthRate > 0 ?
+                                    <ArrowUp size={14} className={styles.growthIcon} /> :
+                                    <ArrowDown size={14} className={styles.growthIcon} />
+                                }
+                                <span style={{ color: getGrowthColor(stats.growthRate) }}>
+                                    {Math.abs(stats.growthRate).toFixed(1)}%
+                                </span>
+                                <span className={styles.growthLabel}>so với hôm qua</span>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
 
-            {/* Recent Bills - Today only */}
-            <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden', marginBottom: '24px' }}>
-                <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>📋 Hóa đơn hôm nay</h3>
-                        <span style={{ fontSize: '12px', color: '#64748b' }}>
-                            Tổng: {stats.totalOrders} đơn | Cập nhật: {new Date().toLocaleTimeString('vi-VN')}
-                        </span>
-                    </div>
+            {/* Recent Orders */}
+            <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                    <h2 className={styles.sectionTitle}>
+                        <Receipt size={22} className={styles.sectionIcon} />
+                        Hóa đơn hôm nay
+                    </h2>
+                    <span className={styles.sectionBadge}>
+                        {stats.totalOrders} đơn
+                    </span>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className={styles.tableWrapper}>
+                    <table className={styles.table}>
                         <thead>
-                            <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontWeight: '500' }}>Mã HD</th>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontWeight: '500' }}>Bàn</th>
-                                <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8', fontWeight: '500' }}>Tổng tiền</th>
-                                <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontWeight: '500' }}>Phương thức</th>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontWeight: '500' }}>Thời gian</th>
+                            <tr className={styles.tableHeader}>
+                                <th className={styles.th}>Mã HD</th>
+                                <th className={styles.th}>Bàn</th>
+                                <th className={`${styles.th} ${styles.thRight}`}>Tổng tiền</th>
+                                <th className={`${styles.th} ${styles.thCenter}`}>Phương thức</th>
+                                <th className={styles.th}>Thời gian</th>
                             </tr>
                         </thead>
                         <tbody>
                             {recentOrders.length > 0 ? (
                                 recentOrders.map(bill => (
-                                    <tr key={bill.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                        <td style={{ padding: '16px', color: 'white', fontWeight: '600' }}>#{bill.id}</td>
-                                        <td style={{ padding: '16px', color: '#e2e8f0' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <Crown size={14} color="#F59E0B" />
+                                    <tr key={bill.id} className={styles.tableRow}>
+                                        <td className={`${styles.td} ${styles.tdId}`}>#{bill.id}</td>
+                                        <td className={styles.td}>
+                                            <span className={styles.tableNumber}>
+                                                <Crown size={16} className={styles.crownIcon} />
                                                 Bàn {getTableNumber(bill)}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#ff6b6b', fontWeight: '700', fontSize: '16px' }}>{formatCurrency(bill.totalAmount)}</td>
-                                        <td style={{ padding: '16px', textAlign: 'center' }}>
-                                            <span style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '6px 12px',
-                                                borderRadius: '8px',
-                                                fontSize: '12px',
-                                                fontWeight: '600',
-                                                background: 'rgba(16,185,129,0.1)',
-                                                color: '#10B981'
-                                            }}>
-                                                {bill.paymentMethod === 'CASH' ? '💰 Tiền mặt' : bill.paymentMethod === 'MOMO' ? '📱 MoMo' : '💳 Chuyển khoản'}
+                                        <td className={`${styles.td} ${styles.tdRight} ${styles.tdAmount}`}>
+                                            {formatCurrency(bill.totalAmount)}
+                                        </td>
+                                        <td className={`${styles.td} ${styles.tdCenter}`}>
+                                            <span className={styles.paymentMethod}>
+                                                {getPaymentMethodIcon(bill.paymentMethod)}
+                                                {getPaymentMethodText(bill.paymentMethod)}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '16px', color: '#94a3b8', fontSize: '13px' }}>{formatDate(bill.createdAt)}</td>
+                                        <td className={`${styles.td} ${styles.tdTime}`}>
+                                            <Clock size={14} className={styles.clockIcon} />
+                                            {formatDate(bill.createdAt)}
+                                        </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="5" style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
-                                        <ShoppingCart size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                                        <p>Chưa có hóa đơn nào hôm nay</p>
-                                        <p style={{ fontSize: '12px', marginTop: '8px' }}>Hóa đơn sẽ hiển thị sau khi có giao dịch</p>
+                                    <td colSpan="5" className={styles.emptyState}>
+                                        <Receipt size={56} className={styles.emptyIcon} />
+                                        <p className={styles.emptyText}>Chưa có hóa đơn nào hôm nay</p>
+                                        <p className={styles.emptySubText}>Hóa đơn sẽ hiển thị sau khi có giao dịch</p>
                                     </td>
                                 </tr>
                             )}
@@ -388,53 +447,46 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Top Products Today */}
+            {/* Top Products */}
             {topProducts.length > 0 && (
-                <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden' }}>
-                    <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>🔥 Top sản phẩm bán chạy hôm nay</h3>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                Cập nhật: {new Date().toLocaleTimeString('vi-VN')}
-                            </span>
-                        </div>
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <h2 className={styles.sectionTitle}>
+                            <Flame size={22} className={styles.sectionIcon} />
+                            Top sản phẩm bán chạy
+                        </h2>
+                        <span className={styles.sectionBadge}>Hôm nay</span>
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className={styles.tableWrapper}>
+                        <table className={styles.table}>
                             <thead>
-                                <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                    <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontWeight: '500', width: '60px' }}>STT</th>
-                                    <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontWeight: '500' }}>Tên sản phẩm</th>
-                                    <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8', fontWeight: '500' }}>Số lượng</th>
-                                    <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8', fontWeight: '500' }}>Doanh thu</th>
+                                <tr className={styles.tableHeader}>
+                                    <th className={`${styles.th} ${styles.thCenter} ${styles.thRank}`}>Hạng</th>
+                                    <th className={styles.th}>Tên sản phẩm</th>
+                                    <th className={`${styles.th} ${styles.thRight}`}>Số lượng</th>
+                                    <th className={`${styles.th} ${styles.thRight}`}>Doanh thu</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {topProducts.map((product, index) => (
-                                    <tr key={index} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                        <td style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontWeight: '600' }}>
-                                            <span style={{
-                                                display: 'inline-block',
-                                                width: '28px',
-                                                height: '28px',
-                                                lineHeight: '28px',
-                                                textAlign: 'center',
-                                                background: index < 3 ? `rgba(255,107,107,0.2)` : '#2d2d3d',
-                                                borderRadius: '8px',
-                                                color: index < 3 ? '#ff6b6b' : '#94a3b8',
-                                                fontWeight: '700'
-                                            }}>
-                                                {index + 1}
+                                    <tr key={index} className={styles.tableRow}>
+                                        <td className={`${styles.td} ${styles.tdCenter}`}>
+                                            <span className={`${styles.rankBadge} ${index < 3 ? styles.rankTop : ''}`}>
+                                                {getRankIcon(index)}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '16px', color: 'white', fontWeight: '500' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <Coffee size={16} color="#ff6b6b" />
+                                        <td className={`${styles.td} ${styles.tdProduct}`}>
+                                            <span className={styles.productName}>
+                                                <Coffee size={18} className={styles.coffeeIcon} />
                                                 {product.name}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#e2e8f0', fontWeight: '500' }}>{product.quantity} lượt</td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#ff6b6b', fontWeight: '700' }}>{formatCurrency(product.revenue)}</td>
+                                        <td className={`${styles.td} ${styles.tdRight} ${styles.tdQuantity}`}>
+                                            {product.quantity} lượt
+                                        </td>
+                                        <td className={`${styles.td} ${styles.tdRight} ${styles.tdRevenue}`}>
+                                            {formatCurrency(product.revenue)}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -442,17 +494,6 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
-
-            <style>{`
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-                
-                button:hover {
-                    transform: translateY(-1px);
-                    transition: all 0.3s;
-                }
-            `}</style>
         </div>
     );
 }

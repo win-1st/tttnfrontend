@@ -1,10 +1,16 @@
-// pages/admin/Dashboard.js - Đã bỏ card Khách hàng
+// pages/admin/Dashboard.js
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, DollarSign, ShoppingCart, Users, Package, Table, RefreshCw, Crown, Coffee, Clock, Search, X } from 'lucide-react';
+import {
+    TrendingUp, DollarSign, ShoppingCart, Package, Table,
+    RefreshCw, Coffee, Search, X, Award,
+    Calendar, CheckCircle, Users, Clock, Percent,
+    ArrowUp, ArrowDown, Minus, Printer, Eye
+} from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import ToastNotification from '../employee/cashier/ToastNotification';
 
 export default function Dashboard() {
+    // State management
     const [stats, setStats] = useState({
         totalProducts: 0,
         periodRevenue: 0,
@@ -12,16 +18,22 @@ export default function Dashboard() {
         totalOrders: 0,
         activeTables: 0,
         totalUsers: 0,
-        growthRate: 0
+        growthRate: 0,
+        averageOrderValue: 0
     });
     const [recentOrders, setRecentOrders] = useState([]);
     const [filteredOrders, setFilteredOrders] = useState([]);
     const [topProducts, setTopProducts] = useState([]);
+    const [topCategories, setTopCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState('week');
     const [searchTerm, setSearchTerm] = useState('');
     const [toasts, setToasts] = useState([]);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [showOrderDetail, setShowOrderDetail] = useState(false);
+    const [recentActivity, setRecentActivity] = useState([]);
 
+    // Toast notification
     const showToast = (message, type = "info", duration = 3000) => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, message, type, duration }]);
@@ -30,7 +42,7 @@ export default function Dashboard() {
         }, duration);
     };
 
-    // Lấy ngày bắt đầu dựa trên timeRange
+    // Date range helpers
     const getStartDateByTimeRange = () => {
         const now = new Date();
         switch (timeRange) {
@@ -52,7 +64,6 @@ export default function Dashboard() {
         }
     };
 
-    // Lấy ngày kết thúc
     const getEndDateByTimeRange = () => {
         const now = new Date();
         switch (timeRange) {
@@ -76,18 +87,79 @@ export default function Dashboard() {
         }
     };
 
+    const getPeriodLabel = () => {
+        switch (timeRange) {
+            case 'day': return 'hôm nay';
+            case 'week': return 'tuần này';
+            case 'month': return 'tháng này';
+            case 'year': return 'năm nay';
+            default: return '';
+        }
+    };
+
+    const getGrowthColor = (growthRate) => {
+        if (growthRate > 0) return '#10B981';
+        if (growthRate < 0) return '#EF4444';
+        return '#64748B';
+    };
+
+    const getGrowthIcon = (growthRate) => {
+        if (growthRate > 0) return <ArrowUp size={16} color="#10B981" />;
+        if (growthRate < 0) return <ArrowDown size={16} color="#EF4444" />;
+        return <Minus size={16} color="#64748B" />;
+    };
+
+    // Format helpers
+    const formatCurrency = (amount) => {
+        if (!amount || amount === 0) return "0đ";
+        return amount.toLocaleString('vi-VN') + 'đ';
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    const getTableNumber = (order) => {
+        return order.tableNumber || order.table?.number || order.tableId || '-';
+    };
+
+    const getStatusBadge = (status) => {
+        const statusMap = {
+            'PAID': { label: 'Đã thanh toán', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+            'PENDING': { label: 'Chờ thanh toán', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+            'CANCELLED': { label: 'Đã hủy', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+            'PROCESSING': { label: 'Đang xử lý', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' }
+        };
+        return statusMap[status] || { label: status, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
+    };
+
+    // Main data fetch
     const fetchDashboardData = async () => {
         setLoading(true);
         try {
-            console.log('Fetching dashboard with timeRange:', timeRange);
+            // Check token
+            const token = localStorage.getItem('token');
+            if (!token) {
+                showToast('Vui lòng đăng nhập lại', 'error');
+                setTimeout(() => window.location.href = '/login', 1500);
+                return;
+            }
 
             const startDate = getStartDateByTimeRange();
             const endDate = getEndDateByTimeRange();
 
-            // 1. Lấy tất cả bills (hóa đơn đã thanh toán)
-            const billsRes = await axiosClient.get('/bills/all');
-            console.log('Bills response:', billsRes.data);
+            console.log('🔄 Fetching dashboard data...', { startDate, endDate });
 
+            // 1. Fetch bills
+            const billsRes = await axiosClient.get('/bills/all');
             let allBills = [];
             if (billsRes.data?.success && billsRes.data?.data) {
                 allBills = billsRes.data.data;
@@ -97,7 +169,9 @@ export default function Dashboard() {
                 allBills = billsRes.data.data;
             }
 
-            // Lọc bills theo thời gian và chỉ lấy đã thanh toán
+            console.log(`📊 Found ${allBills.length} total bills`);
+
+            // 2. Filter bills by date range and payment status
             const filteredBills = allBills.filter(bill => {
                 const billDate = new Date(bill.createdAt);
                 const isInRange = billDate >= startDate && billDate <= endDate;
@@ -105,17 +179,20 @@ export default function Dashboard() {
                 return isInRange && isPaid;
             });
 
-            console.log('Filtered bills count:', filteredBills.length);
+            console.log(`✅ ${filteredBills.length} paid bills in selected period`);
 
-            // Tính tổng doanh thu trong kỳ
+            // 3. Calculate revenue
             const periodRevenue = filteredBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
             const totalOrders = filteredBills.length;
 
-            // Tính tổng doanh thu tất cả thời gian
+            // 4. Calculate total revenue all time
             const allPaidBills = allBills.filter(bill => bill.paymentStatus === 'PAID');
             const totalRevenueAll = allPaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
 
-            // Tính growth rate
+            // 5. Calculate average order value
+            const averageOrderValue = totalOrders > 0 ? periodRevenue / totalOrders : 0;
+
+            // 6. Calculate growth rate
             let growthRate = 0;
             if (timeRange === 'day' && periodRevenue > 0) {
                 const yesterdayStart = new Date(startDate);
@@ -130,30 +207,48 @@ export default function Dashboard() {
                 if (yesterdayRevenue > 0) {
                     growthRate = ((periodRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
                 }
+            } else if (timeRange === 'week' && periodRevenue > 0) {
+                // Compare with previous week
+                const prevWeekStart = new Date(startDate);
+                prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+                const prevWeekEnd = new Date(endDate);
+                prevWeekEnd.setDate(prevWeekEnd.getDate() - 7);
+                const prevWeekBills = allBills.filter(bill => {
+                    const billDate = new Date(bill.createdAt);
+                    return billDate >= prevWeekStart && billDate <= prevWeekEnd && bill.paymentStatus === 'PAID';
+                });
+                const prevWeekRevenue = prevWeekBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+                if (prevWeekRevenue > 0) {
+                    growthRate = ((periodRevenue - prevWeekRevenue) / prevWeekRevenue) * 100;
+                }
             }
 
-            // Lấy top sản phẩm từ bills
+            // 7. Calculate top products
             const topProductsList = await calculateTopProductsFromBills(filteredBills);
             setTopProducts(topProductsList);
 
-            // Lấy đơn hàng gần đây
+            // 8. Calculate top categories
+            const topCategoriesList = await calculateTopCategories(filteredBills);
+            setTopCategories(topCategoriesList);
+
+            // 9. Sort recent orders
             const sortedBills = [...filteredBills].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setRecentOrders(sortedBills.slice(0, 20));
             setFilteredOrders(sortedBills.slice(0, 20));
 
-            // Lấy các thông tin khác
+            // 10. Fetch products count
             let totalProducts = 0;
-            let activeTables = 0;
-
             try {
                 const productsRes = await axiosClient.get('/products');
                 if (productsRes.data?.data) {
                     totalProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data.length : 0;
                 }
             } catch (err) {
-                console.error('Error fetching products:', err);
+                console.error('❌ Error fetching products:', err);
             }
 
+            // 11. Fetch active tables
+            let activeTables = 0;
             try {
                 const tablesRes = await axiosClient.get('/tables');
                 if (tablesRes.data?.data) {
@@ -161,63 +256,122 @@ export default function Dashboard() {
                     activeTables = tables.filter(t => t.status === 'OCCUPIED').length;
                 }
             } catch (err) {
-                console.error('Error fetching tables:', err);
+                console.error('❌ Error fetching tables:', err);
             }
 
-            // ĐÃ XÓA PHẦN GỌI API USERS
 
+            // 13. Generate recent activity
+            const activities = generateRecentActivity(filteredBills);
+            setRecentActivity(activities);
+
+            // 14. Update stats
             setStats({
-                totalProducts: totalProducts,
-                periodRevenue: periodRevenue,
+                totalProducts,
+                periodRevenue,
                 totalRevenue: totalRevenueAll,
-                totalOrders: totalOrders,
-                activeTables: activeTables,
-                totalUsers: 0,  // Set cứng bằng 0 hoặc bỏ field này
-                growthRate: growthRate
+                totalOrders,
+                activeTables,
+                growthRate,
+                averageOrderValue
             });
 
+            console.log('✅ Dashboard data loaded successfully');
+
         } catch (error) {
-            console.error('Error fetching dashboard:', error);
+            console.error('❌ Error fetching dashboard:', error);
             showToast('Không thể tải dữ liệu dashboard', 'error');
+
+            // If 401, redirect to login
+            if (error.response?.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setTimeout(() => window.location.href = '/login', 1500);
+            }
         } finally {
             setLoading(false);
         }
     };
 
+    // Calculate top products
     const calculateTopProductsFromBills = async (bills) => {
-        const token = localStorage.getItem('token');
         const dishStats = {};
 
         for (const bill of bills) {
             try {
-                const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (detailResponse.ok) {
-                    const detailResult = await detailResponse.json();
-                    const items = detailResult.data?.items || [];
+                const response = await axiosClient.get(`/bills/${bill.id}`);
+                if (response.data) {
+                    const items = response.data.data?.items || [];
                     for (const item of items) {
-                        const dishName = item.name || 'Món ăn';
+                        const dishName = item.name || item.productName || 'Món ăn';
                         if (!dishStats[dishName]) {
                             dishStats[dishName] = { quantity: 0, revenue: 0 };
                         }
                         dishStats[dishName].quantity += item.quantity || 1;
-                        dishStats[dishName].revenue += (item.unitPrice || 0) * (item.quantity || 1);
+                        dishStats[dishName].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
                     }
                 }
             } catch (err) {
-                console.error("Error fetching bill detail:", err);
+                console.error("❌ Error fetching bill detail:", err);
             }
         }
 
-        const sorted = Object.entries(dishStats)
-            .map(([name, stats]) => ({ productName: name, quantity: stats.quantity, revenue: stats.revenue }))
+        return Object.entries(dishStats)
+            .map(([name, stats]) => ({
+                productName: name,
+                quantity: stats.quantity,
+                revenue: stats.revenue
+            }))
             .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 5);
-
-        return sorted;
+            .slice(0, 10);
     };
 
+    // Calculate top categories
+    const calculateTopCategories = async (bills) => {
+        // This is a simplified version - in real app, you'd fetch from API
+        const categoryStats = {};
+
+        for (const bill of bills) {
+            try {
+                const response = await axiosClient.get(`/bills/${bill.id}`);
+                if (response.data) {
+                    const items = response.data.data?.items || [];
+                    for (const item of items) {
+                        const category = item.category || item.categoryName || 'Khác';
+                        if (!categoryStats[category]) {
+                            categoryStats[category] = { count: 0, revenue: 0 };
+                        }
+                        categoryStats[category].count += 1;
+                        categoryStats[category].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
+                    }
+                }
+            } catch (err) {
+                console.error("❌ Error fetching bill detail:", err);
+            }
+        }
+
+        return Object.entries(categoryStats)
+            .map(([name, stats]) => ({
+                categoryName: name,
+                count: stats.count,
+                revenue: stats.revenue
+            }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 5);
+    };
+
+    // Generate recent activity
+    const generateRecentActivity = (bills) => {
+        return bills.slice(0, 10).map(bill => ({
+            id: bill.id,
+            type: 'order',
+            message: `Đơn hàng #${bill.id} tại bàn ${getTableNumber(bill)} đã được thanh toán`,
+            time: bill.createdAt,
+            amount: bill.totalAmount,
+            status: bill.paymentStatus
+        }));
+    };
+
+    // Search handlers
     const handleSearch = (keyword) => {
         setSearchTerm(keyword);
         if (!keyword.trim()) {
@@ -228,7 +382,7 @@ export default function Dashboard() {
         const lowerKeyword = keyword.toLowerCase().trim();
         const filtered = recentOrders.filter(order => {
             if (order.id && order.id.toString().includes(lowerKeyword)) return true;
-            const tableNumber = order.tableNumber || '';
+            const tableNumber = getTableNumber(order);
             if (tableNumber.toString().includes(lowerKeyword)) return true;
             const total = (order.totalAmount || 0).toString();
             if (total.includes(lowerKeyword)) return true;
@@ -242,67 +396,128 @@ export default function Dashboard() {
         setFilteredOrders(recentOrders);
     };
 
+    // View order detail
+    const viewOrderDetail = async (order) => {
+        try {
+            const response = await axiosClient.get(`/bills/${order.id}`);
+            if (response.data) {
+                setSelectedOrder({
+                    ...order,
+                    items: response.data.data?.items || []
+                });
+                setShowOrderDetail(true);
+            }
+        } catch (err) {
+            console.error('❌ Error fetching order detail:', err);
+            showToast('Không thể tải chi tiết đơn hàng', 'error');
+        }
+    };
+
+    // Print order
+    const printOrder = (order) => {
+        // Implement print functionality
+        showToast(`Đang in hóa đơn #${order.id}...`, 'info');
+        // In real app, you'd open a print window or generate PDF
+    };
+
+    // Load data on mount and timeRange change
     useEffect(() => {
         fetchDashboardData();
     }, [timeRange]);
 
-    const formatCurrency = (amount) => {
-        if (!amount || amount === 0) return "0đ";
-        return amount.toLocaleString('vi-VN') + 'đ';
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return '-';
-        const date = new Date(dateString);
-        return date.toLocaleString('vi-VN');
-    };
-
-    const getTableNumber = (order) => {
-        return order.tableNumber || order.table?.number || '-';
-    };
-
-    const getGrowthColor = (growthRate) => {
-        if (growthRate > 0) return '#10B981';
-        if (growthRate < 0) return '#EF4444';
-        return '#64748B';
-    };
-
-    const getPeriodLabel = () => {
-        switch (timeRange) {
-            case 'day': return 'hôm nay';
-            case 'week': return 'tuần này';
-            case 'month': return 'tháng này';
-            case 'year': return 'năm nay';
-            default: return '';
-        }
-    };
-
+    // Loading state
     if (loading) {
         return (
-            <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
-                <div style={{ width: '40px', height: '40px', border: '4px solid #2d2d3d', borderTop: '4px solid #ff6b6b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
-                <p>Đang tải dữ liệu...</p>
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '60vh',
+                color: '#94a3b8'
+            }}>
+                <div style={{
+                    width: '48px',
+                    height: '48px',
+                    border: '4px solid #2d2d3d',
+                    borderTop: '4px solid #ff6b6b',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '16px'
+                }}></div>
+                <p style={{ fontSize: '16px' }}>Đang tải dữ liệu dashboard...</p>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
         );
     }
 
-    // ĐÃ XÓA CARD "Khách hàng" khỏi statCards
+    // Stat cards configuration
     const statCards = [
-        { key: 'totalRevenue', label: 'Tổng doanh thu', value: formatCurrency(stats.totalRevenue), icon: <DollarSign size={24} />, color: '#ff6b6b', bg: 'rgba(255,107,107,0.1)' },
-        { key: 'periodRevenue', label: `Doanh thu ${getPeriodLabel()}`, value: formatCurrency(stats.periodRevenue), icon: <TrendingUp size={24} />, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-        { key: 'totalOrders', label: `Đơn hàng ${getPeriodLabel()}`, value: stats.totalOrders, icon: <ShoppingCart size={24} />, color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-        { key: 'totalProducts', label: 'Sản phẩm', value: stats.totalProducts, icon: <Package size={24} />, color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
-        { key: 'activeTables', label: 'Bàn đang dùng', value: stats.activeTables, icon: <Table size={24} />, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-        // ĐÃ XÓA CARD "Khách hàng"
+        {
+            key: 'totalRevenue',
+            label: 'Tổng doanh thu',
+            value: formatCurrency(stats.totalRevenue),
+            icon: <DollarSign size={24} />,
+            color: '#ff6b6b',
+            bg: 'rgba(255,107,107,0.1)'
+        },
+        {
+            key: 'periodRevenue',
+            label: `Doanh thu ${getPeriodLabel()}`,
+            value: formatCurrency(stats.periodRevenue),
+            icon: <TrendingUp size={24} />,
+            color: '#10B981',
+            bg: 'rgba(16,185,129,0.1)',
+            growth: stats.growthRate
+        },
+        {
+            key: 'totalOrders',
+            label: `Đơn hàng ${getPeriodLabel()}`,
+            value: stats.totalOrders,
+            icon: <ShoppingCart size={24} />,
+            color: '#3B82F6',
+            bg: 'rgba(59,130,246,0.1)'
+        },
+        {
+            key: 'averageOrder',
+            label: 'Trung bình/đơn',
+            value: formatCurrency(stats.averageOrderValue),
+            icon: <Percent size={24} />,
+            color: '#8B5CF6',
+            bg: 'rgba(139,92,246,0.1)'
+        },
+        {
+            key: 'activeTables',
+            label: 'Bàn đang dùng',
+            value: stats.activeTables,
+            icon: <Table size={24} />,
+            color: '#F59E0B',
+            bg: 'rgba(245,158,11,0.1)'
+        },
+        {
+            key: 'totalProducts',
+            label: 'Sản phẩm',
+            value: stats.totalProducts,
+            icon: <Package size={24} />,
+            color: '#EC4899',
+            bg: 'rgba(236,72,153,0.1)'
+        }
     ];
 
     const displayOrders = searchTerm ? filteredOrders : recentOrders;
 
     return (
-        <div>
+        <div style={{ padding: '20px' }}>
             {/* Toast Container */}
-            <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                zIndex: 9999,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+            }}>
                 {toasts.map((toast) => (
                     <ToastNotification
                         key={toast.id}
@@ -314,14 +529,56 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            {/* Header */}
+            <div style={{
+                marginBottom: '32px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '16px'
+            }}>
                 <div>
-                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b' }}>Dashboard</h2>
-                    <p style={{ color: '#94a3b8', fontSize: '14px' }}>Tổng quan hoạt động kinh doanh</p>
+                    <h2 style={{
+                        fontSize: '32px',
+                        fontWeight: '800',
+                        marginBottom: '8px',
+                        color: '#ff6b6b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <TrendingUp size={28} /> Dashboard
+                    </h2>
+                    <p style={{
+                        color: '#94a3b8',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                    }}>
+                        <Calendar size={14} /> Tổng quan hoạt động kinh doanh
+                        <span style={{ marginLeft: '8px', padding: '4px 12px', background: '#2d2d3d', borderRadius: '12px', fontSize: '12px' }}>
+                            {getPeriodLabel().toUpperCase()}
+                        </span>
+                    </p>
                 </div>
                 <button
                     onClick={fetchDashboardData}
-                    style={{ padding: '10px 20px', background: '#2d2d3d', border: 'none', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    style={{
+                        padding: '10px 20px',
+                        background: '#2d2d3d',
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = '#3d3d4d'}
+                    onMouseLeave={(e) => e.target.style.background = '#2d2d3d'}
                 >
                     <RefreshCw size={16} /> Làm mới
                 </button>
@@ -330,30 +587,48 @@ export default function Dashboard() {
             {/* Growth Rate Banner */}
             {stats.growthRate !== 0 && (
                 <div style={{
-                    marginBottom: '20px',
-                    padding: '12px 20px',
-                    background: `rgba(${stats.growthRate > 0 ? '16,185,129' : '239,68,68'}, 0.1)`,
+                    marginBottom: '24px',
+                    padding: '14px 24px',
+                    background: `rgba(${stats.growthRate > 0 ? '16,185,129' : '239,68,68'}, 0.08)`,
                     borderRadius: '12px',
                     border: `1px solid ${getGrowthColor(stats.growthRate)}`,
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
                     gap: '12px'
                 }}>
-                    <TrendingUp size={20} color={getGrowthColor(stats.growthRate)} />
-                    <span style={{ color: '#e2e8f0' }}>
-                        Tăng trưởng doanh thu:
-                        <strong style={{ color: getGrowthColor(stats.growthRate), marginLeft: '8px' }}>
-                            {stats.growthRate > 0 ? '+' : ''}{stats.growthRate.toFixed(1)}%
-                        </strong>
-                        <span style={{ marginLeft: '8px', fontSize: '12px', color: '#94a3b8' }}>
-                            (so với kỳ trước)
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {getGrowthIcon(stats.growthRate)}
+                        <span style={{ color: '#e2e8f0' }}>
+                            <strong>Tăng trưởng doanh thu:</strong>
+                            <strong style={{
+                                color: getGrowthColor(stats.growthRate),
+                                marginLeft: '8px',
+                                fontSize: '18px'
+                            }}>
+                                {stats.growthRate > 0 ? '+' : ''}{stats.growthRate.toFixed(1)}%
+                            </strong>
                         </span>
+                    </div>
+                    <span style={{ fontSize: '13px', color: '#94a3b8' }}>
+                        So với {timeRange === 'day' ? 'hôm qua' : 'tuần trước'}
                     </span>
                 </div>
             )}
 
             {/* Time Range Filter */}
-            <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{
+                marginBottom: '24px',
+                display: 'flex',
+                gap: '8px',
+                flexWrap: 'wrap',
+                background: '#1a1a2e',
+                padding: '6px',
+                borderRadius: '12px',
+                border: '1px solid #2d2d3d',
+                width: 'fit-content'
+            }}>
                 {[
                     { value: 'day', label: 'Hôm nay' },
                     { value: 'week', label: 'Tuần này' },
@@ -365,7 +640,7 @@ export default function Dashboard() {
                         onClick={() => setTimeRange(range.value)}
                         style={{
                             padding: '8px 20px',
-                            background: timeRange === range.value ? '#ff6b6b' : '#2d2d3d',
+                            background: timeRange === range.value ? '#ff6b6b' : 'transparent',
                             color: timeRange === range.value ? 'white' : '#94a3b8',
                             border: 'none',
                             borderRadius: '8px',
@@ -381,15 +656,62 @@ export default function Dashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '20px',
+                marginBottom: '32px'
+            }}>
                 {statCards.map(card => (
-                    <div key={card.key} style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', padding: '20px' }}>
+                    <div key={card.key} style={{
+                        background: '#1a1a2e',
+                        border: '1px solid #2d2d3d',
+                        borderRadius: '16px',
+                        padding: '24px 20px',
+                        transition: 'all 0.3s',
+                        cursor: 'default'
+                    }}
+                        onMouseEnter={(e) => e.target.style.borderColor = card.color}
+                        onMouseLeave={(e) => e.target.style.borderColor = '#2d2d3d'}
+                    >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '8px' }}>{card.label}</p>
-                                <h3 style={{ fontSize: '28px', fontWeight: '700', color: card.color }}>{card.value}</h3>
+                                <p style={{
+                                    color: '#94a3b8',
+                                    fontSize: '14px',
+                                    marginBottom: '8px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                }}>
+                                    {card.label}
+                                    {card.growth !== undefined && card.growth !== 0 && (
+                                        <span style={{
+                                            marginLeft: '8px',
+                                            fontSize: '12px',
+                                            color: getGrowthColor(card.growth),
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                        }}>
+                                            {getGrowthIcon(card.growth)}
+                                            {card.growth > 0 ? '+' : ''}{card.growth.toFixed(1)}%
+                                        </span>
+                                    )}
+                                </p>
+                                <h3 style={{ fontSize: '28px', fontWeight: '700', color: card.color }}>
+                                    {card.value}
+                                </h3>
                             </div>
-                            <div style={{ width: '48px', height: '48px', background: card.bg, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{
+                                width: '48px',
+                                height: '48px',
+                                background: card.bg,
+                                borderRadius: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
                                 {card.icon}
                             </div>
                         </div>
@@ -397,13 +719,51 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            {/* Recent Orders Table với tìm kiếm */}
-            <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden', marginBottom: '24px' }}>
+            {/* Recent Orders Table with Search */}
+            <div style={{
+                background: '#1a1a2e',
+                border: '1px solid #2d2d3d',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                marginBottom: '24px'
+            }}>
                 <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>📋 Hóa đơn đã thanh toán</h3>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '16px'
+                    }}>
+                        <h3 style={{
+                            fontSize: '18px',
+                            fontWeight: '600',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}>
+                            <DollarSign size={20} color="#10B981" /> Hóa đơn đã thanh toán
+                            <span style={{
+                                fontSize: '12px',
+                                background: '#2d2d3d',
+                                padding: '2px 10px',
+                                borderRadius: '12px',
+                                color: '#94a3b8'
+                            }}>
+                                {displayOrders.length}
+                            </span>
+                        </h3>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2d2d3d', borderRadius: '8px', padding: '4px 12px', border: '1px solid #3d3d4d' }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: '#2d2d3d',
+                            borderRadius: '8px',
+                            padding: '4px 12px',
+                            border: '1px solid #3d3d4d'
+                        }}>
                             <Search size={18} color="#94a3b8" />
                             <input
                                 type="text"
@@ -421,7 +781,16 @@ export default function Dashboard() {
                                 }}
                             />
                             {searchTerm && (
-                                <button onClick={clearSearch} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                <button
+                                    onClick={clearSearch}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: '#94a3b8',
+                                        padding: '4px'
+                                    }}
+                                >
                                     <X size={16} />
                                 </button>
                             )}
@@ -437,32 +806,86 @@ export default function Dashboard() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8' }}>Mã HD</th>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8' }}>Bàn</th>
-                                <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8' }}>Tổng tiền</th>
-                                <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>Trạng thái</th>
-                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8' }}>Thời gian</th>
+                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Mã HD</th>
+                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Bàn</th>
+                                <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Tổng tiền</th>
+                                <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Trạng thái</th>
+                                <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Thời gian</th>
+                                <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
                             {displayOrders.length > 0 ? (
-                                displayOrders.map(order => (
-                                    <tr key={order.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                        <td style={{ padding: '16px', color: 'white', fontWeight: '500' }}>#{order.id}</td>
-                                        <td style={{ padding: '16px', color: '#e2e8f0' }}>Bàn {getTableNumber(order)}</td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#ff6b6b', fontWeight: '600' }}>{formatCurrency(order.totalAmount)}</td>
-                                        <td style={{ padding: '16px', textAlign: 'center' }}>
-                                            <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', background: 'rgba(16,185,129,0.1)', color: '#10B981' }}>
-                                                <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                                                Đã thanh toán
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '16px', color: '#94a3b8', fontSize: '13px' }}>{formatDate(order.createdAt)}</td>
-                                    </tr>
-                                ))
+                                displayOrders.map(order => {
+                                    const status = getStatusBadge(order.paymentStatus);
+                                    return (
+                                        <tr key={order.id} style={{ borderBottom: '1px solid #2d2d3d', transition: 'background 0.2s' }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                        >
+                                            <td style={{ padding: '16px', color: 'white', fontWeight: '500' }}>#{order.id}</td>
+                                            <td style={{ padding: '16px', color: '#e2e8f0' }}>Bàn {getTableNumber(order)}</td>
+                                            <td style={{ padding: '16px', textAlign: 'right', color: '#ff6b6b', fontWeight: '600' }}>
+                                                {formatCurrency(order.totalAmount)}
+                                            </td>
+                                            <td style={{ padding: '16px', textAlign: 'center' }}>
+                                                <span style={{
+                                                    padding: '4px 12px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '500',
+                                                    background: status.bg,
+                                                    color: status.color
+                                                }}>
+                                                    <CheckCircle size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                                                    {status.label}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '16px', color: '#94a3b8', fontSize: '13px' }}>{formatDate(order.createdAt)}</td>
+                                            <td style={{ padding: '16px', textAlign: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                                    <button
+                                                        onClick={() => viewOrderDetail(order)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: '#3B82F6',
+                                                            cursor: 'pointer',
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            transition: 'background 0.2s'
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                        title="Xem chi tiết"
+                                                    >
+                                                        <Eye size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => printOrder(order)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: '#94a3b8',
+                                                            cursor: 'pointer',
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            transition: 'background 0.2s'
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(148,163,184,0.1)'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                        title="In hóa đơn"
+                                                    >
+                                                        <Printer size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
-                                    <td colSpan="5" style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
+                                    <td colSpan="6" style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
                                         <ShoppingCart size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
                                         <p>Chưa có hóa đơn nào trong kỳ</p>
                                     </td>
@@ -473,38 +896,272 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Top Products */}
-            {topProducts.length > 0 && (
-                <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden' }}>
-                    <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>🔥 Top sản phẩm bán chạy</h3>
+            {/* Two Column Layout: Top Products & Categories */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                gap: '24px',
+                marginBottom: '24px'
+            }}>
+                {/* Top Products */}
+                {topProducts.length > 0 && (
+                    <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden' }}>
+                        <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
+                            <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Coffee size={20} color="#ff6b6b" /> Top sản phẩm bán chạy
+                            </h3>
+                        </div>
+                        <div style={{ padding: '16px' }}>
+                            {topProducts.slice(0, 5).map((product, idx) => (
+                                <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '12px 16px',
+                                    borderBottom: idx < 4 ? '1px solid #2d2d3d' : 'none'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <span style={{
+                                            width: '24px',
+                                            height: '24px',
+                                            background: idx === 0 ? '#ff6b6b' : idx === 1 ? '#F59E0B' : idx === 2 ? '#3B82F6' : '#2d2d3d',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold',
+                                            color: 'white'
+                                        }}>
+                                            {idx + 1}
+                                        </span>
+                                        <span style={{ color: 'white', fontWeight: '500' }}>{product.productName}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>{product.quantity} lượt</span>
+                                        <span style={{ color: '#ff6b6b', fontWeight: '600' }}>{formatCurrency(product.revenue)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                    <th style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>STT</th>
-                                    <th style={{ padding: '16px', textAlign: 'left', color: '#94a3b8' }}>Tên sản phẩm</th>
-                                    <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8' }}>Số lượng</th>
-                                    <th style={{ padding: '16px', textAlign: 'right', color: '#94a3b8' }}>Doanh thu</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {topProducts.map((product, idx) => (
-                                    <tr key={idx} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                        <td style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>{idx + 1}</td>
-                                        <td style={{ padding: '16px', color: 'white', fontWeight: '500' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <Coffee size={16} color="#ff6b6b" />
-                                                {product.productName}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#e2e8f0' }}>{product.quantity} lượt</td>
-                                        <td style={{ padding: '16px', textAlign: 'right', color: '#ff6b6b', fontWeight: '600' }}>{formatCurrency(product.revenue)}</td>
+                )}
+
+                {/* Top Categories */}
+                {topCategories.length > 0 && (
+                    <div style={{ background: '#1a1a2e', border: '1px solid #2d2d3d', borderRadius: '16px', overflow: 'hidden' }}>
+                        <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
+                            <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Award size={20} color="#8B5CF6" /> Top danh mục
+                            </h3>
+                        </div>
+                        <div style={{ padding: '16px' }}>
+                            {topCategories.map((category, idx) => (
+                                <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '12px 16px',
+                                    borderBottom: idx < topCategories.length - 1 ? '1px solid #2d2d3d' : 'none'
+                                }}>
+                                    <span style={{ color: 'white', fontWeight: '500' }}>{category.categoryName}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>{category.count} món</span>
+                                        <span style={{ color: '#8B5CF6', fontWeight: '600' }}>{formatCurrency(category.revenue)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Recent Activity */}
+            {recentActivity.length > 0 && (
+                <div style={{
+                    background: '#1a1a2e',
+                    border: '1px solid #2d2d3d',
+                    borderRadius: '16px',
+                    overflow: 'hidden'
+                }}>
+                    <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
+                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Clock size={20} color="#F59E0B" /> Hoạt động gần đây
+                        </h3>
+                    </div>
+                    <div style={{ padding: '16px' }}>
+                        {recentActivity.map((activity, idx) => (
+                            <div key={idx} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '10px 16px',
+                                borderBottom: idx < recentActivity.length - 1 ? '1px solid #2d2d3d' : 'none'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        background: 'rgba(245,158,11,0.1)',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <ShoppingCart size={14} color="#F59E0B" />
+                                    </div>
+                                    <div>
+                                        <div style={{ color: '#e2e8f0', fontSize: '14px' }}>{activity.message}</div>
+                                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>{formatDate(activity.time)}</div>
+                                    </div>
+                                </div>
+                                <span style={{ color: '#10B981', fontWeight: '600' }}>{formatCurrency(activity.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Order Detail Modal */}
+            {showOrderDetail && selectedOrder && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '20px'
+                }} onClick={() => setShowOrderDetail(false)}>
+                    <div style={{
+                        background: '#1a1a2e',
+                        borderRadius: '16px',
+                        maxWidth: '600px',
+                        width: '100%',
+                        maxHeight: '80vh',
+                        overflow: 'auto',
+                        padding: '24px',
+                        border: '1px solid #2d2d3d'
+                    }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '20px', fontWeight: '600', color: 'white' }}>
+                                Chi tiết đơn hàng #{selectedOrder.id}
+                            </h3>
+                            <button
+                                onClick={() => setShowOrderDetail(false)}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#94a3b8',
+                                    cursor: 'pointer',
+                                    padding: '4px'
+                                }}
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div style={{ marginBottom: '16px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                            <div>
+                                <span style={{ color: '#94a3b8', fontSize: '13px' }}>Bàn:</span>
+                                <span style={{ color: 'white', marginLeft: '8px', fontWeight: '500' }}>
+                                    {getTableNumber(selectedOrder)}
+                                </span>
+                            </div>
+                            <div>
+                                <span style={{ color: '#94a3b8', fontSize: '13px' }}>Trạng thái:</span>
+                                <span style={{
+                                    marginLeft: '8px',
+                                    padding: '2px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '13px',
+                                    fontWeight: '500',
+                                    background: getStatusBadge(selectedOrder.paymentStatus).bg,
+                                    color: getStatusBadge(selectedOrder.paymentStatus).color
+                                }}>
+                                    {getStatusBadge(selectedOrder.paymentStatus).label}
+                                </span>
+                            </div>
+                            <div>
+                                <span style={{ color: '#94a3b8', fontSize: '13px' }}>Thời gian:</span>
+                                <span style={{ color: '#e2e8f0', marginLeft: '8px' }}>
+                                    {formatDate(selectedOrder.createdAt)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style={{ borderTop: '1px solid #2d2d3d', paddingTop: '16px', marginTop: '8px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
+                                        <th style={{ padding: '8px', textAlign: 'left', color: '#94a3b8', fontSize: '13px' }}>Món</th>
+                                        <th style={{ padding: '8px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>SL</th>
+                                        <th style={{ padding: '8px', textAlign: 'right', color: '#94a3b8', fontSize: '13px' }}>Đơn giá</th>
+                                        <th style={{ padding: '8px', textAlign: 'right', color: '#94a3b8', fontSize: '13px' }}>Thành tiền</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {(selectedOrder.items || []).map((item, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #2d2d3d' }}>
+                                            <td style={{ padding: '8px', color: 'white' }}>{item.name || item.productName}</td>
+                                            <td style={{ padding: '8px', textAlign: 'center', color: '#e2e8f0' }}>{item.quantity}</td>
+                                            <td style={{ padding: '8px', textAlign: 'right', color: '#94a3b8' }}>
+                                                {formatCurrency(item.unitPrice || item.price)}
+                                            </td>
+                                            <td style={{ padding: '8px', textAlign: 'right', color: '#ff6b6b', fontWeight: '500' }}>
+                                                {formatCurrency((item.unitPrice || item.price || 0) * (item.quantity || 1))}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan="3" style={{ padding: '12px 8px', textAlign: 'right', color: '#e2e8f0', fontWeight: '600' }}>
+                                            Tổng cộng:
+                                        </td>
+                                        <td style={{ padding: '12px 8px', textAlign: 'right', color: '#ff6b6b', fontWeight: '700', fontSize: '18px' }}>
+                                            {formatCurrency(selectedOrder.totalAmount)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div style={{ marginTop: '20px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => printOrder(selectedOrder)}
+                                style={{
+                                    padding: '10px 24px',
+                                    background: '#2d2d3d',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}
+                            >
+                                <Printer size={16} /> In hóa đơn
+                            </button>
+                            <button
+                                onClick={() => setShowOrderDetail(false)}
+                                style={{
+                                    padding: '10px 24px',
+                                    background: '#ff6b6b',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    color: 'white',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Đóng
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

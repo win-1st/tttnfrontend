@@ -64,7 +64,7 @@ const CashierLayout = () => {
         { path: "/cashier/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { path: "/cashier/bill", label: "Đơn hàng", icon: Receipt },
         { path: "/cashier/report", label: "Báo cáo", icon: BarChart3 },
-        { path: "/cashier/setting", label: "Cài đặt", icon: Settings },
+        { path: "/cashier/setting", label: "Thông tin", icon: Settings },
     ];
 
     // Nếu là trang chi tiết (có ID), render full screen
@@ -156,7 +156,7 @@ const CashierLayout = () => {
                             className={`${styles.topbarNavBtn} ${location.pathname === '/cashier/booking' ? styles.topbarNavActive : ''}`}
                         >
                             <BookOpen size={18} />
-                            <span>Đặt bàn</span>
+                            <span>Đặt bàn và đổi quà</span>
                         </button>
                     </div>
                 </div>

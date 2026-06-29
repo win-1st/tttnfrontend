@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, Clock, Users, AlertTriangle, CheckCircle, XCircle, Phone, Mail, MapPin, Search, RefreshCw, User, Tag } from 'lucide-react';
+import {
+    Calendar, Clock, Users, AlertTriangle, CheckCircle, XCircle,
+    Phone, Mail, MapPin, Search, RefreshCw, User, Tag,
+    FileText, Home, UserPlus, MessageSquare, Eye,
+    ChevronLeft, ChevronRight, List, Grid, Filter
+} from 'lucide-react';
 import axios from 'axios';
 import axiosClient from '../../services/axiosClient';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function ReservationMonitor() {
     const [reservations, setReservations] = useState([]);
@@ -10,8 +16,16 @@ export default function ReservationMonitor() {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(false);
     const [selectedReservation, setSelectedReservation] = useState(null);
+    const [toast, setToast] = useState(null);
 
     const API_BASE_URL = 'http://localhost:8080';
+
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
 
     useEffect(() => {
         fetchData();
@@ -22,11 +36,9 @@ export default function ReservationMonitor() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Fetch reservations từ backend
             const reservationsRes = await axiosClient.get('/reservations/all');
             const reservationsData = reservationsRes.data?.data || [];
 
-            // Fetch tables để lấy thông tin bàn
             const tablesRes = await axiosClient.get('/tables');
             const tablesData = tablesRes.data?.data || tablesRes.data || [];
 
@@ -34,6 +46,7 @@ export default function ReservationMonitor() {
             setTables(tablesData);
         } catch (error) {
             console.error('Lỗi khi tải dữ liệu:', error);
+            showToast('Không thể tải dữ liệu đặt bàn!', 'error');
         } finally {
             setLoading(false);
         }
@@ -42,26 +55,31 @@ export default function ReservationMonitor() {
     const updateReservationStatus = async (id, status) => {
         try {
             let endpoint = '';
+            let statusText = '';
             switch (status) {
                 case 'CONFIRMED':
                     endpoint = `/reservations/${id}/confirm`;
+                    statusText = 'xác nhận';
                     break;
                 case 'CANCELLED':
                     endpoint = `/reservations/${id}/cancel`;
+                    statusText = 'hủy';
                     break;
                 case 'CHECKED_IN':
                     endpoint = `/reservations/${id}/checkin`;
+                    statusText = 'check-in';
                     break;
                 default:
                     return;
             }
 
             await axiosClient.patch(endpoint);
+            showToast(`Đã ${statusText} đặt bàn thành công!`, 'success');
             await fetchData();
             setSelectedReservation(null);
         } catch (error) {
             console.error('Lỗi khi cập nhật trạng thái:', error);
-            alert('Không thể cập nhật trạng thái. Vui lòng thử lại!');
+            showToast('Không thể cập nhật trạng thái. Vui lòng thử lại!', 'error');
         }
     };
 
@@ -75,6 +93,17 @@ export default function ReservationMonitor() {
             'NO_SHOW': { bg: 'rgba(220, 38, 38, 0.1)', border: 'rgba(220, 38, 38, 0.3)', text: '#DC2626' }
         };
         return colors[status] || colors['PENDING'];
+    };
+
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'PENDING': return <Clock size={14} />;
+            case 'CONFIRMED': return <CheckCircle size={14} />;
+            case 'CHECKED_IN': return <User size={14} />;
+            case 'CANCELLED': return <XCircle size={14} />;
+            case 'COMPLETED': return <CheckCircle size={14} />;
+            default: return <AlertTriangle size={14} />;
+        }
     };
 
     const getStatusText = (status) => {
@@ -120,6 +149,25 @@ export default function ReservationMonitor() {
 
     return (
         <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
+            {/* Toast Notification */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             {/* Header */}
             <div style={{
                 padding: '32px 24px',
@@ -134,9 +182,12 @@ export default function ReservationMonitor() {
                             fontSize: '32px',
                             fontWeight: '800',
                             marginBottom: '8px',
-                            color: 'white'
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px'
                         }}>
-                            📋 Giám sát Đặt bàn
+                            <FileText size={32} /> Giám sát Đặt bàn
                         </h1>
                         <p style={{ color: '#94A3B8', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Calendar size={16} />
@@ -186,7 +237,7 @@ export default function ReservationMonitor() {
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}>
-                            <Calendar size={24} color="#3B82F6" />
+                            <FileText size={24} color="#3B82F6" />
                         </div>
                         <div>
                             <div style={{ fontSize: '28px', fontWeight: '700', color: '#1e293b' }}>
@@ -392,10 +443,7 @@ export default function ReservationMonitor() {
                                     color: statusColor.text,
                                     marginBottom: '16px'
                                 }}>
-                                    {reservation.status === 'PENDING' && <Clock size={14} />}
-                                    {reservation.status === 'CONFIRMED' && <CheckCircle size={14} />}
-                                    {reservation.status === 'CHECKED_IN' && <User size={14} />}
-                                    {reservation.status === 'CANCELLED' && <XCircle size={14} />}
+                                    {getStatusIcon(reservation.status)}
                                     {getStatusText(reservation.status)}
                                 </div>
 
@@ -404,8 +452,12 @@ export default function ReservationMonitor() {
                                     fontSize: '18px',
                                     fontWeight: '700',
                                     color: '#1e293b',
-                                    marginBottom: '12px'
+                                    marginBottom: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}>
+                                    <User size={18} color="#64748b" />
                                     {reservation.customerName}
                                 </h3>
 
@@ -439,9 +491,12 @@ export default function ReservationMonitor() {
                                         padding: '12px',
                                         fontSize: '13px',
                                         color: '#3B82F6',
-                                        marginBottom: '12px'
+                                        marginBottom: '12px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
                                     }}>
-                                        <Tag size={12} style={{ marginRight: '6px' }} />
+                                        <Tag size={12} />
                                         Bàn số {tableInfo.number} - Sức chứa: {tableInfo.capacity || 4} người
                                     </div>
                                 )}
@@ -454,9 +509,13 @@ export default function ReservationMonitor() {
                                         borderRadius: '8px',
                                         fontSize: '13px',
                                         color: '#64748b',
-                                        fontStyle: 'italic'
+                                        fontStyle: 'italic',
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '6px'
                                     }}>
-                                        📝 {reservation.notes}
+                                        <MessageSquare size={14} color="#64748b" />
+                                        {reservation.notes}
                                     </div>
                                 )}
 
@@ -486,6 +545,7 @@ export default function ReservationMonitor() {
                                                 cursor: 'pointer'
                                             }}
                                         >
+                                            <CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} />
                                             Xác nhận
                                         </button>
                                         <button
@@ -505,6 +565,7 @@ export default function ReservationMonitor() {
                                                 cursor: 'pointer'
                                             }}
                                         >
+                                            <XCircle size={14} style={{ display: 'inline', marginRight: '4px' }} />
                                             Hủy
                                         </button>
                                     </div>
@@ -530,10 +591,14 @@ export default function ReservationMonitor() {
                                                 borderRadius: '8px',
                                                 fontSize: '13px',
                                                 fontWeight: '600',
-                                                cursor: 'pointer'
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
                                             }}
                                         >
-                                            Check-in
+                                            <UserPlus size={14} /> Check-in
                                         </button>
                                     </div>
                                 )}
@@ -579,8 +644,8 @@ export default function ReservationMonitor() {
                             alignItems: 'center',
                             marginBottom: '24px'
                         }}>
-                            <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b' }}>
-                                Chi tiết đặt bàn
+                            <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Eye size={24} color="#3B82F6" /> Chi tiết đặt bàn
                             </h2>
                             <button
                                 onClick={() => setSelectedReservation(null)}
@@ -611,6 +676,7 @@ export default function ReservationMonitor() {
                                     fontWeight: '600',
                                     color: getStatusColor(selectedReservation.status).text
                                 }}>
+                                    {getStatusIcon(selectedReservation.status)}
                                     {getStatusText(selectedReservation.status)}
                                 </div>
                             </div>
@@ -619,14 +685,18 @@ export default function ReservationMonitor() {
                                 <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                     Tên khách hàng
                                 </label>
-                                <div style={{ fontWeight: '600', color: '#1e293b' }}>{selectedReservation.customerName}</div>
+                                <div style={{ fontWeight: '600', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <User size={16} color="#64748b" /> {selectedReservation.customerName}
+                                </div>
                             </div>
 
                             <div>
                                 <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                     Số điện thoại
                                 </label>
-                                <div style={{ color: '#1e293b' }}>{selectedReservation.customerPhone}</div>
+                                <div style={{ color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Phone size={16} color="#64748b" /> {selectedReservation.customerPhone}
+                                </div>
                             </div>
 
                             {selectedReservation.customerEmail && (
@@ -634,7 +704,9 @@ export default function ReservationMonitor() {
                                     <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                         Email
                                     </label>
-                                    <div style={{ color: '#1e293b' }}>{selectedReservation.customerEmail}</div>
+                                    <div style={{ color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Mail size={16} color="#64748b" /> {selectedReservation.customerEmail}
+                                    </div>
                                 </div>
                             )}
 
@@ -642,7 +714,8 @@ export default function ReservationMonitor() {
                                 <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                     Ngày & giờ
                                 </label>
-                                <div style={{ color: '#1e293b' }}>
+                                <div style={{ color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Clock size={16} color="#64748b" />
                                     {formatDateTime(selectedReservation.reservationDate, selectedReservation.reservationTime)}
                                 </div>
                             </div>
@@ -651,7 +724,9 @@ export default function ReservationMonitor() {
                                 <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                     Số lượng khách
                                 </label>
-                                <div style={{ color: '#1e293b' }}>{selectedReservation.numberOfGuests || 2} người</div>
+                                <div style={{ color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Users size={16} color="#64748b" /> {selectedReservation.numberOfGuests || 2} người
+                                </div>
                             </div>
 
                             {selectedReservation.notes && (
@@ -659,7 +734,9 @@ export default function ReservationMonitor() {
                                     <label style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'block' }}>
                                         Ghi chú
                                     </label>
-                                    <div style={{ color: '#64748b', fontStyle: 'italic' }}>{selectedReservation.notes}</div>
+                                    <div style={{ color: '#64748b', fontStyle: 'italic', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                        <MessageSquare size={16} color="#64748b" /> {selectedReservation.notes}
+                                    </div>
                                 </div>
                             )}
 
@@ -675,10 +752,14 @@ export default function ReservationMonitor() {
                                             border: 'none',
                                             borderRadius: '10px',
                                             fontWeight: '600',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '6px'
                                         }}
                                     >
-                                        Xác nhận đặt bàn
+                                        <CheckCircle size={18} /> Xác nhận đặt bàn
                                     </button>
                                     <button
                                         onClick={() => updateReservationStatus(selectedReservation.id, 'CANCELLED')}
@@ -690,10 +771,14 @@ export default function ReservationMonitor() {
                                             border: 'none',
                                             borderRadius: '10px',
                                             fontWeight: '600',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '6px'
                                         }}
                                     >
-                                        Hủy đặt bàn
+                                        <XCircle size={18} /> Hủy đặt bàn
                                     </button>
                                 </div>
                             )}
@@ -710,10 +795,14 @@ export default function ReservationMonitor() {
                                         borderRadius: '10px',
                                         fontWeight: '600',
                                         cursor: 'pointer',
-                                        marginTop: '16px'
+                                        marginTop: '16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px'
                                     }}
                                 >
-                                    Đánh dấu đã đến (Check-in)
+                                    <UserPlus size={18} /> Đánh dấu đã đến (Check-in)
                                 </button>
                             )}
                         </div>

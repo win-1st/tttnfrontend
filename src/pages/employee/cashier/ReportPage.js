@@ -1,6 +1,11 @@
 // pages/employee/cashier/ReportPage.js
 import React, { useState, useEffect } from "react";
-import { Calendar, TrendingUp, DollarSign, Users, Coffee, Download, Filter } from "lucide-react";
+import {
+    Calendar, TrendingUp, DollarSign, Users, Coffee,
+    Download, Filter, FileText, CreditCard, Smartphone,
+    Landmark, Clock, Award, BarChart3, PieChart,
+    RefreshCw, AlertCircle, CheckCircle, X
+} from "lucide-react";
 import * as XLSX from 'xlsx';
 import ToastNotification from "./ToastNotification";
 import styles from "./ReportPage.module.css";
@@ -8,13 +13,29 @@ import styles from "./ReportPage.module.css";
 const ReportPage = () => {
     const [reportType, setReportType] = useState('daily');
     const [dateRange, setDateRange] = useState({
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
+        startDate: getTodayVietnam(),
+        endDate: getTodayVietnam()
     });
     const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [toasts, setToasts] = useState([]);
+
+    // Hàm lấy ngày hôm nay theo múi giờ Việt Nam (UTC+7)
+    function getTodayVietnam() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // Hàm format date theo múi giờ Việt Nam
+    function formatDateVietnam(dateStr) {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
 
     // Hàm hiển thị toast
     const showToast = (message, type = "info", duration = 3000) => {
@@ -33,30 +54,45 @@ const ReportPage = () => {
 
     const getDateRangeByType = () => {
         const today = new Date();
+        const todayStr = getTodayVietnam();
+
         switch (reportType) {
             case 'daily':
                 return {
-                    startDate: today.toISOString().split('T')[0],
-                    endDate: today.toISOString().split('T')[0]
+                    startDate: todayStr,
+                    endDate: todayStr
                 };
             case 'weekly': {
+                // Lấy ngày đầu tuần (Thứ 2)
+                const dayOfWeek = today.getDay();
+                const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 const startOfWeek = new Date(today);
-                const day = today.getDay();
-                const diff = day === 0 ? 6 : day - 1;
                 startOfWeek.setDate(today.getDate() - diff);
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+                const startYear = startOfWeek.getFullYear();
+                const startMonth = String(startOfWeek.getMonth() + 1).padStart(2, '0');
+                const startDay = String(startOfWeek.getDate()).padStart(2, '0');
+                const endYear = endOfWeek.getFullYear();
+                const endMonth = String(endOfWeek.getMonth() + 1).padStart(2, '0');
+                const endDay = String(endOfWeek.getDate()).padStart(2, '0');
+
                 return {
-                    startDate: startOfWeek.toISOString().split('T')[0],
-                    endDate: endOfWeek.toISOString().split('T')[0]
+                    startDate: `${startYear}-${startMonth}-${startDay}`,
+                    endDate: `${endYear}-${endMonth}-${endDay}`
                 };
             }
             case 'monthly': {
-                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const startYear = today.getFullYear();
+                const startMonth = String(today.getMonth() + 1).padStart(2, '0');
                 const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                const endYear = endOfMonth.getFullYear();
+                const endMonth = String(endOfMonth.getMonth() + 1).padStart(2, '0');
+                const endDay = String(endOfMonth.getDate()).padStart(2, '0');
                 return {
-                    startDate: startOfMonth.toISOString().split('T')[0],
-                    endDate: endOfMonth.toISOString().split('T')[0]
+                    startDate: `${startYear}-${startMonth}-01`,
+                    endDate: `${endYear}-${endMonth}-${endDay}`
                 };
             }
             default:
@@ -70,6 +106,8 @@ const ReportPage = () => {
             const token = localStorage.getItem('token');
             const { startDate, endDate } = getDateRangeByType();
 
+            console.log('Fetching report from:', startDate, 'to:', endDate);
+
             const response = await fetch(`http://localhost:8080/api/bills/all`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -79,8 +117,13 @@ const ReportPage = () => {
                 let allBills = result.data || [];
 
                 const filteredBills = allBills.filter(bill => {
-                    const billDate = new Date(bill.createdAt).toISOString().split('T')[0];
-                    return billDate >= startDate && billDate <= endDate && bill.paymentStatus === 'PAID';
+                    if (!bill.createdAt) return false;
+                    const billDate = new Date(bill.createdAt);
+                    const year = billDate.getFullYear();
+                    const month = String(billDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(billDate.getDate()).padStart(2, '0');
+                    const billDateStr = `${year}-${month}-${day}`;
+                    return billDateStr >= startDate && billDateStr <= endDate && bill.paymentStatus === 'PAID';
                 });
 
                 const totalRevenue = filteredBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
@@ -97,7 +140,7 @@ const ReportPage = () => {
 
                 const dishStats = {};
                 for (const bill of filteredBills) {
-                    if (bill.orderId) {
+                    if (bill.id) {
                         try {
                             const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
                                 headers: { 'Authorization': `Bearer ${token}` }
@@ -106,12 +149,12 @@ const ReportPage = () => {
                                 const detailResult = await detailResponse.json();
                                 const items = detailResult.data?.items || [];
                                 for (const item of items) {
-                                    const dishName = item.name || 'Món ăn';
+                                    const dishName = item.name || item.product?.name || 'Món ăn';
                                     if (!dishStats[dishName]) {
                                         dishStats[dishName] = { quantity: 0, revenue: 0 };
                                     }
                                     dishStats[dishName].quantity += item.quantity || 1;
-                                    dishStats[dishName].revenue += (item.unitPrice || 0) * (item.quantity || 1);
+                                    dishStats[dishName].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
                                 }
                             }
                         } catch (err) {
@@ -150,14 +193,13 @@ const ReportPage = () => {
         }
     };
 
-    // Hàm xuất Excel mà không cần backend
+    // Hàm xuất Excel
     const handleExportExcel = async () => {
         setExporting(true);
         try {
             const token = localStorage.getItem('token');
             const { startDate, endDate } = getDateRangeByType();
 
-            // Lấy lại danh sách bills (nếu chưa có)
             let allBills = reportData?.bills || [];
             if (!reportData?.bills) {
                 const response = await fetch(`http://localhost:8080/api/bills/all`, {
@@ -170,8 +212,13 @@ const ReportPage = () => {
             }
 
             const filteredBills = allBills.filter(bill => {
-                const billDate = new Date(bill.createdAt).toISOString().split('T')[0];
-                return billDate >= startDate && billDate <= endDate && bill.paymentStatus === 'PAID';
+                if (!bill.createdAt) return false;
+                const billDate = new Date(bill.createdAt);
+                const year = billDate.getFullYear();
+                const month = String(billDate.getMonth() + 1).padStart(2, '0');
+                const day = String(billDate.getDate()).padStart(2, '0');
+                const billDateStr = `${year}-${month}-${day}`;
+                return billDateStr >= startDate && billDateStr <= endDate && bill.paymentStatus === 'PAID';
             });
 
             if (filteredBills.length === 0) {
@@ -180,7 +227,6 @@ const ReportPage = () => {
                 return;
             }
 
-            // Lấy chi tiết items cho từng bill
             const billsWithItems = [];
             for (const bill of filteredBills) {
                 const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
@@ -197,13 +243,12 @@ const ReportPage = () => {
                 }
             }
 
-            // ========== TẠO FILE EXCEL ==========
             const workbook = XLSX.utils.book_new();
 
-            // Sheet 1: Tổng hợp doanh thu
+            // Sheet 1: Tổng hợp
             const summaryData = [
                 ['BÁO CÁO DOANH THU'],
-                [`Từ ngày: ${formatDate(startDate)} đến ${formatDate(endDate)}`],
+                [`Từ ngày: ${formatDateVietnam(startDate)} đến ${formatDateVietnam(endDate)}`],
                 [],
                 ['CHỈ TIÊU', 'GIÁ TRỊ'],
                 ['Tổng doanh thu', formatCurrency(reportData?.totalRevenue || calculateTotalRevenue(filteredBills))],
@@ -233,7 +278,7 @@ const ReportPage = () => {
                     formatCurrency(bill.totalAmount),
                     getPaymentMethodLabel(bill.paymentMethod),
                     bill.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán',
-                    formatDateTime(bill.createdAt)
+                    formatDateTimeVietnam(bill.createdAt)
                 ])
             ];
             const billsSheet = XLSX.utils.aoa_to_sheet(billsData);
@@ -246,7 +291,7 @@ const ReportPage = () => {
                 ...billsWithItems.flatMap(bill =>
                     bill.items.map(item => [
                         `#${bill.id}`,
-                        item.name || item.product?.name,
+                        item.name || item.product?.name || 'Món',
                         item.quantity,
                         formatCurrency(item.unitPrice || item.price),
                         formatCurrency((item.unitPrice || item.price) * item.quantity)
@@ -257,7 +302,6 @@ const ReportPage = () => {
             itemsSheet['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
             XLSX.utils.book_append_sheet(workbook, itemsSheet, 'Chi tiết món ăn');
 
-            // Xuất file
             XLSX.writeFile(workbook, `bao_cao_doanh_thu_${startDate}_den_${endDate}.xlsx`);
 
             showToast("Xuất báo cáo thành công!", "success");
@@ -283,14 +327,14 @@ const ReportPage = () => {
         const bankingRevenue = calculateTotalRevenue(bankingBills);
 
         return [
-            { method: '💵 Tiền mặt', count: cashBills.length, revenue: formatCurrency(cashRevenue), percentage: totalRevenue > 0 ? ((cashRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' },
-            { method: '📱 MoMo', count: momoBills.length, revenue: formatCurrency(momoRevenue), percentage: totalRevenue > 0 ? ((momoRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' },
-            { method: '💳 Chuyển khoản/Thẻ', count: bankingBills.length, revenue: formatCurrency(bankingRevenue), percentage: totalRevenue > 0 ? ((bankingRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' }
+            { method: 'Tiền mặt', count: cashBills.length, revenue: formatCurrency(cashRevenue), percentage: totalRevenue > 0 ? ((cashRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' },
+            { method: 'MoMo', count: momoBills.length, revenue: formatCurrency(momoRevenue), percentage: totalRevenue > 0 ? ((momoRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' },
+            { method: 'Chuyển khoản/Thẻ', count: bankingBills.length, revenue: formatCurrency(bankingRevenue), percentage: totalRevenue > 0 ? ((bankingRevenue / totalRevenue) * 100).toFixed(1) + '%' : '0%' }
         ];
     };
 
     const getPaymentMethodLabel = (method) => {
-        const methods = { 'CASH': 'Tiền mặt', 'MOMO': 'MoMo', 'PAYOS': 'Chuyển khoản' };
+        const methods = { 'CASH': 'Tiền mặt', 'MOMO': 'MoMo', 'PAYOS': 'Chuyển khoản', 'BANKING': 'Chuyển khoản' };
         return methods[method] || method;
     };
 
@@ -299,15 +343,10 @@ const ReportPage = () => {
         return amount.toLocaleString('vi-VN') + 'đ';
     };
 
-    const formatDate = (dateString) => {
+    const formatDateTimeVietnam = (dateString) => {
         if (!dateString) return "";
         const date = new Date(dateString);
-        return date.toLocaleDateString('vi-VN');
-    };
-
-    const formatDateTime = (dateString) => {
-        if (!dateString) return "";
-        return new Date(dateString).toLocaleString('vi-VN');
+        return date.toLocaleString('vi-VN');
     };
 
     return (
@@ -326,7 +365,9 @@ const ReportPage = () => {
             </div>
 
             <div className={styles.header}>
-                <h2>Báo cáo doanh thu</h2>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <BarChart3 size={24} /> Báo cáo doanh thu
+                </h2>
                 {reportData && (
                     <button onClick={handleExportExcel} disabled={exporting} className={styles.exportBtn}>
                         <Download size={16} /> {exporting ? "Đang xuất..." : "Xuất Excel"}
@@ -337,16 +378,16 @@ const ReportPage = () => {
             <div className={styles.filterSection}>
                 <div className={styles.reportTypeBtns}>
                     <button className={reportType === 'daily' ? styles.activeBtn : styles.btn} onClick={() => setReportType('daily')}>
-                        Hôm nay
+                        <Calendar size={16} /> Hôm nay
                     </button>
                     <button className={reportType === 'weekly' ? styles.activeBtn : styles.btn} onClick={() => setReportType('weekly')}>
-                        Tuần này
+                        <Calendar size={16} /> Tuần này
                     </button>
                     <button className={reportType === 'monthly' ? styles.activeBtn : styles.btn} onClick={() => setReportType('monthly')}>
-                        Tháng này
+                        <Calendar size={16} /> Tháng này
                     </button>
                     <button className={reportType === 'custom' ? styles.activeBtn : styles.btn} onClick={() => setReportType('custom')}>
-                        Tùy chọn
+                        <Filter size={16} /> Tùy chọn
                     </button>
                 </div>
 
@@ -374,7 +415,7 @@ const ReportPage = () => {
                 {reportType !== 'custom' && (
                     <div className={styles.reportInfo}>
                         <span className={styles.dateRangeInfo}>
-                            {reportData && `Từ ${formatDate(reportData.startDate)} → ${formatDate(reportData.endDate)}`}
+                            {reportData && `Từ ${formatDateVietnam(reportData.startDate)} → ${formatDateVietnam(reportData.endDate)}`}
                         </span>
                     </div>
                 )}
@@ -391,28 +432,36 @@ const ReportPage = () => {
                 <>
                     <div className={styles.summaryCards}>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>💰</div>
+                            <div className={styles.cardIcon}>
+                                <DollarSign size={28} color="#10B981" />
+                            </div>
                             <div className={styles.cardInfo}>
                                 <div className={styles.cardTitle}>Tổng doanh thu</div>
                                 <div className={styles.cardValue}>{formatCurrency(reportData.totalRevenue)}</div>
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>🧾</div>
+                            <div className={styles.cardIcon}>
+                                <FileText size={28} color="#3B82F6" />
+                            </div>
                             <div className={styles.cardInfo}>
                                 <div className={styles.cardTitle}>Số đơn hàng</div>
                                 <div className={styles.cardValue}>{reportData.totalOrders}</div>
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>📊</div>
+                            <div className={styles.cardIcon}>
+                                <TrendingUp size={28} color="#8B5CF6" />
+                            </div>
                             <div className={styles.cardInfo}>
                                 <div className={styles.cardTitle}>TB mỗi đơn</div>
                                 <div className={styles.cardValue}>{formatCurrency(reportData.averageOrderValue)}</div>
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>👥</div>
+                            <div className={styles.cardIcon}>
+                                <Users size={28} color="#F59E0B" />
+                            </div>
                             <div className={styles.cardInfo}>
                                 <div className={styles.cardTitle}>Khách hàng</div>
                                 <div className={styles.cardValue}>{reportData.totalCustomers}</div>
@@ -421,7 +470,9 @@ const ReportPage = () => {
                     </div>
 
                     <div className={styles.paymentBreakdown}>
-                        <h3>Chi tiết theo hình thức thanh toán</h3>
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <CreditCard size={20} /> Chi tiết theo hình thức thanh toán
+                        </h3>
                         <table className={styles.breakdownTable}>
                             <thead>
                                 <tr>
@@ -433,19 +484,25 @@ const ReportPage = () => {
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>💵 Tiền mặt</td>
+                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <DollarSign size={16} /> Tiền mặt
+                                    </td>
                                     <td>{reportData.cashCount || 0}</td>
                                     <td>{formatCurrency(reportData.cashRevenue)}</td>
                                     <td>{reportData.totalRevenue > 0 ? ((reportData.cashRevenue / reportData.totalRevenue) * 100).toFixed(1) : 0}%</td>
                                 </tr>
                                 <tr>
-                                    <td>📱 MoMo</td>
+                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Smartphone size={16} /> MoMo
+                                    </td>
                                     <td>{reportData.momoCount || 0}</td>
                                     <td>{formatCurrency(reportData.momoRevenue)}</td>
                                     <td>{reportData.totalRevenue > 0 ? ((reportData.momoRevenue / reportData.totalRevenue) * 100).toFixed(1) : 0}%</td>
                                 </tr>
                                 <tr>
-                                    <td>💳 Chuyển khoản/Thẻ</td>
+                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Landmark size={16} /> Chuyển khoản/Thẻ
+                                    </td>
                                     <td>{reportData.bankingCount || 0}</td>
                                     <td>{formatCurrency(reportData.bankingRevenue)}</td>
                                     <td>{reportData.totalRevenue > 0 ? ((reportData.bankingRevenue / reportData.totalRevenue) * 100).toFixed(1) : 0}%</td>
@@ -456,7 +513,9 @@ const ReportPage = () => {
 
                     {reportData.topDishes?.length > 0 && (
                         <div className={styles.topDishes}>
-                            <h3>🔥 Top món bán chạy</h3>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Award size={20} color="#EF4444" /> Top món bán chạy
+                            </h3>
                             <div className={styles.dishesList}>
                                 {reportData.topDishes.map((dish, idx) => (
                                     <div key={idx} className={styles.dishItem}>
@@ -474,7 +533,9 @@ const ReportPage = () => {
 
             {!loading && !reportData && reportType !== 'custom' && (
                 <div className={styles.emptyState}>
-                    <div className={styles.emptyIcon}>📊</div>
+                    <div className={styles.emptyIcon}>
+                        <BarChart3 size={48} color="#64748B" />
+                    </div>
                     <h3>Chưa có dữ liệu</h3>
                     <p>Chọn loại báo cáo để xem thống kê doanh thu</p>
                 </div>

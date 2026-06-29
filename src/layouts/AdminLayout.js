@@ -13,7 +13,20 @@ import {
     Package,
     TrendingUp,
     Warehouse,
-    Star
+    Star,
+    LayoutDashboard,
+    Settings,
+    Bell,
+    User,
+    Home,
+    Menu,
+    X,
+    Gift,
+    Award,
+    Clock,
+    DollarSign,
+    CreditCard,
+    PieChart
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import styles from './AdminLayout.module.css';
@@ -38,15 +51,15 @@ export default function AdminLayout() {
     const [user, setUser] = useState(null);
 
     const menuItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'tables', label: 'Quản lý Bàn', icon: Table },
         { id: 'products', label: 'Quản lý Sản phẩm', icon: ShoppingBag },
         { id: 'categories', label: 'Quản lý Danh mục', icon: Package },
-        { id: 'inventory', label: 'Quản lý Kho', icon: Warehouse },        // 🆕
-        { id: 'promotions', label: 'Quản lý Khuyến mãi', icon: Tag },
+        { id: 'inventory', label: 'Quản lý Kho', icon: Warehouse },
+        { id: 'promotions', label: 'Quản lý Khuyến mãi', icon: Gift },
         { id: 'reservations', label: 'Giám sát Đặt bàn', icon: Calendar },
         { id: 'employees', label: 'Quản lý Nhân viên', icon: Users },
-        { id: 'customer-points', label: 'Tích điểm KH', icon: Star },      // 🆕
+        { id: 'customer-points', label: 'Tích điểm KH', icon: Star },
         { id: 'reports', label: 'Báo cáo Doanh thu', icon: TrendingUp },
         { id: 'billandaudit', label: 'Hóa đơn', icon: FileText },
     ];
@@ -72,7 +85,6 @@ export default function AdminLayout() {
     }, [navigate]);
 
     const handleLogout = () => {
-        // Xóa thông tin đăng nhập hiện tại
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
@@ -179,7 +191,7 @@ export default function AdminLayout() {
                     refreshTrigger={refreshTrigger}
                     setRefreshTrigger={setRefreshTrigger}
                 />;
-            case 'inventory':                                          // 🆕
+            case 'inventory':
                 return <Inventory />;
             case 'promotions':
                 return <Promotions
@@ -197,7 +209,7 @@ export default function AdminLayout() {
                     refreshTrigger={refreshTrigger}
                     setRefreshTrigger={setRefreshTrigger}
                 />;
-            case 'customer-points':                                    // 🆕
+            case 'customer-points':
                 return <CustomerPoints />;
             case 'reports':
                 return <Reports />;
@@ -220,10 +232,15 @@ export default function AdminLayout() {
                 <div className={styles['sidebar-header']}>
                     {sidebarOpen ? (
                         <div className={styles['brand-container']}>
+                            <div className={styles['brand-icon']}>
+                                <LayoutDashboard size={28} color="#FF6B6B" />
+                            </div>
                             <h1 className={styles['brand-title']}>Win Admin</h1>
                         </div>
                     ) : (
-                        <div className={styles['brand-icon-collapsed']}>🎱</div>
+                        <div className={styles['brand-icon-collapsed']}>
+                            <LayoutDashboard size={24} color="#FF6B6B" />
+                        </div>
                     )}
                 </div>
 

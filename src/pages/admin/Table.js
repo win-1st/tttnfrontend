@@ -1,7 +1,13 @@
+// TableManagement.js
 import React, { useEffect, useState } from 'react';
-import { Table, Search, Plus, RefreshCw, X, Trash2 } from 'lucide-react';
+import {
+    Table, Search, Plus, RefreshCw, X, Trash2,
+    Edit2, Eye, EyeOff, AlertCircle, CheckCircle,
+    Star, Crown, Award, Package, Users, Hash
+} from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function TableManagement({ tables, setTables, refreshTrigger, setRefreshTrigger }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -11,10 +17,21 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         name: '',
         number: '',
         capacity: '',
-        type: 'STANDARD'  // THÊM: loại bàn mặc định
+        type: 'STANDARD'
     });
     const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
+
+    // ===== STATE CHO TOAST =====
+    const [toast, setToast] = useState(null);
+
+    // Hàm hiển thị toast
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
 
     const API_BASE_URL = 'http://localhost:8080';
     const getToken = () => localStorage.getItem('token');
@@ -42,6 +59,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
             }
         } catch (error) {
             console.error('Lỗi tải bàn:', error);
+            showToast('Không thể tải danh sách bàn!', 'error');
             if (error.response?.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -71,13 +89,12 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         e.preventDefault();
 
         if (!formData.number || !formData.capacity) {
-            alert('Vui lòng nhập đầy đủ số bàn và sức chứa!');
+            showToast('Vui lòng nhập đầy đủ số bàn và sức chứa!', 'warning');
             return;
         }
 
-        // Kiểm tra số bàn đã tồn tại
         if (isTableNumberExist(formData.number)) {
-            alert(`Số bàn ${formData.number} đã tồn tại! Vui lòng chọn số bàn khác.`);
+            showToast(`Số bàn ${formData.number} đã tồn tại!`, 'error');
             return;
         }
 
@@ -94,7 +111,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 name: formData.name || `Bàn ${formData.number}`,
                 number: parseInt(formData.number),
                 capacity: parseInt(formData.capacity),
-                type: formData.type  // THÊM: gửi type lên backend
+                type: formData.type
             };
 
             const response = await axios.post(`${API_BASE_URL}/api/tables`, payload, {
@@ -105,18 +122,18 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
             });
 
             if (response.data?.success) {
-                alert('Thêm bàn thành công!');
+                showToast(`✅ Thêm bàn số ${formData.number} thành công!`, 'success');
                 setShowModal(false);
                 setFormData({ name: '', number: '', capacity: '', type: 'STANDARD' });
                 fetchTables();
                 if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Thêm bàn thất bại!');
+                showToast(response.data?.message || 'Thêm bàn thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi thêm bàn:', error);
             const errorMsg = error.response?.data?.message || error.response?.data || 'Thêm bàn thất bại!';
-            alert(errorMsg);
+            showToast(errorMsg, 'error');
         } finally {
             setSubmitting(false);
         }
@@ -140,14 +157,16 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
             );
 
             if (response.data?.success) {
+                const statusText = getStatusText(status);
+                showToast(`✅ Đã cập nhật trạng thái thành: ${statusText}`, 'success');
                 fetchTables();
                 setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Cập nhật thất bại!');
+                showToast(response.data?.message || 'Cập nhật thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi cập nhật trạng thái:', error);
-            alert('Cập nhật thất bại!');
+            showToast('Cập nhật trạng thái thất bại!', 'error');
         }
     };
 
@@ -167,15 +186,15 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
             });
 
             if (response.data?.success) {
-                alert('Xóa bàn thành công!');
+                showToast(`✅ Xóa bàn số ${tableNumber} thành công!`, 'success');
                 fetchTables();
                 setRefreshTrigger(prev => prev + 1);
             } else {
-                alert(response.data?.message || 'Xóa thất bại!');
+                showToast(response.data?.message || 'Xóa thất bại!', 'error');
             }
         } catch (error) {
             console.error('Lỗi xóa bàn:', error);
-            alert(error.response?.data?.message || 'Xóa bàn thất bại!');
+            showToast(error.response?.data?.message || 'Xóa bàn thất bại!', 'error');
         }
     };
 
@@ -199,7 +218,6 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         }
     };
 
-    // Lấy màu cho loại bàn
     const getTypeColor = (type) => {
         switch (type) {
             case 'VIP': return '#F59E0B';
@@ -210,9 +228,17 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
 
     const getTypeText = (type) => {
         switch (type) {
-            case 'VIP': return '🌟 VIP';
-            case 'PREMIUM': return '⭐ Premium';
-            default: return '📌 Tiêu chuẩn';
+            case 'VIP': return 'VIP';
+            case 'PREMIUM': return 'Premium';
+            default: return 'Tiêu chuẩn';
+        }
+    };
+
+    const getTypeIcon = (type) => {
+        switch (type) {
+            case 'VIP': return <Star size={14} color="#F59E0B" />;
+            case 'PREMIUM': return <Crown size={14} color="#8B5CF6" />;
+            default: return <Award size={14} color="#64748B" />;
         }
     };
 
@@ -238,10 +264,33 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
 
     return (
         <div>
+            {/* ===== RENDER TOAST ===== */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b' }}>Quản lý Bàn Billiards</h2>
-                    <p style={{ color: '#94a3b8' }}>Tổng số: {tables.length} bàn</p>
+                    <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Table size={28} /> Quản lý Bàn Billiards
+                    </h2>
+                    <p style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Users size={14} /> Tổng số: {tables.length} bàn
+                    </p>
                 </div>
                 <button
                     onClick={() => { setShowModal(true); setFormData({ name: '', number: '', capacity: '', type: 'STANDARD' }); }}
@@ -279,11 +328,11 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                             <div style={{ flex: 1 }}>
-                                <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white' }}>
+                                <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     {table.tableName || `Bàn ${table.number}`}
                                 </h3>
-                                <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-                                    Số bàn: #{table.number} | ID: {table.id}
+                                <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Hash size={12} /> Số bàn: #{table.number} | ID: {table.id}
                                 </p>
                             </div>
                             <button
@@ -297,19 +346,36 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
 
                         <div style={{ marginBottom: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ color: '#94a3b8', fontSize: '14px' }}>Loại bàn:</span>
-                                <span style={{ color: getTypeColor(table.type), fontWeight: '500' }}>
-                                    {getTypeText(table.type)}
+                                <span style={{ color: '#94a3b8', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Package size={14} /> Loại bàn:
+                                </span>
+                                <span style={{ color: getTypeColor(table.type), fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {getTypeIcon(table.type)} {getTypeText(table.type)}
                                 </span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <span style={{ color: '#94a3b8', fontSize: '14px' }}>Sức chứa:</span>
+                                <span style={{ color: '#94a3b8', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Users size={14} /> Sức chứa:
+                                </span>
                                 <span style={{ color: 'white', fontWeight: '500' }}>{table.capacity} người</span>
                             </div>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #2d2d3d' }}>
-                            <div style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: `rgba(${getStatusColor(table.status) === '#10B981' ? '16,185,129' : getStatusColor(table.status) === '#EF4444' ? '239,68,68' : getStatusColor(table.status) === '#FBBF24' ? '251,191,36' : '100,116,139'}, 0.1)`, color: getStatusColor(table.status) }}>
+                            <div style={{
+                                padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
+                                background: `rgba(${getStatusColor(table.status) === '#10B981' ? '16,185,129' :
+                                    getStatusColor(table.status) === '#EF4444' ? '239,68,68' :
+                                        getStatusColor(table.status) === '#FBBF24' ? '251,191,36' : '100,116,139'}, 0.1)`,
+                                color: getStatusColor(table.status),
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}>
+                                {table.status === 'FREE' && <CheckCircle size={12} />}
+                                {table.status === 'OCCUPIED' && <X size={12} />}
+                                {table.status === 'RESERVED' && <AlertCircle size={12} />}
+                                {table.status === 'MAINTENANCE' && <Edit2 size={12} />}
                                 {getStatusText(table.status)}
                             </div>
                             <select
@@ -343,7 +409,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 )}
             </div>
 
-            {/* MODAL THÊM BÀN - ĐÃ THÊM LOẠI BÀN */}
+            {/* MODAL THÊM BÀN */}
             {showModal && (
                 <div style={{
                     position: 'fixed',
@@ -366,7 +432,9 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                         padding: '28px'
                     }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: 'white' }}>Thêm bàn mới</h3>
+                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Plus size={20} color="#ff6b6b" /> Thêm bàn mới
+                            </h3>
                             <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                                 <X size={24} />
                             </button>
@@ -388,6 +456,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
 
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Hash size={14} style={{ display: 'inline', marginRight: '4px' }} />
                                     Số bàn <span style={{ color: '#ff6b6b' }}>*</span>
                                     <span style={{ color: '#64748B', fontSize: '12px', marginLeft: '8px' }}>(không được trùng)</span>
                                 </label>
@@ -410,15 +479,15 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                                     }}
                                 />
                                 {formData.number && isTableNumberExist(formData.number) && (
-                                    <p style={{ color: '#EF4444', fontSize: '11px', marginTop: '4px' }}>
-                                        ⚠️ Số bàn {formData.number} đã tồn tại!
+                                    <p style={{ color: '#EF4444', fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <AlertCircle size={12} /> Số bàn {formData.number} đã tồn tại!
                                     </p>
                                 )}
                             </div>
 
-                            {/* THÊM: Chọn loại bàn */}
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Package size={14} style={{ display: 'inline', marginRight: '4px' }} />
                                     Loại bàn <span style={{ color: '#ff6b6b' }}>*</span>
                                 </label>
                                 <select
@@ -426,14 +495,15 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                     style={{ width: '100%', padding: '12px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '10px', color: 'white', fontSize: '14px', outline: 'none' }}
                                 >
-                                    <option value="STANDARD">📌 Tiêu chuẩn</option>
-                                    <option value="PREMIUM">⭐ Premium</option>
-                                    <option value="VIP">🌟 VIP</option>
+                                    <option value="STANDARD">Tiêu chuẩn</option>
+                                    <option value="PREMIUM">Premium</option>
+                                    <option value="VIP">VIP</option>
                                 </select>
                             </div>
 
                             <div style={{ marginBottom: '24px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Users size={14} style={{ display: 'inline', marginRight: '4px' }} />
                                     Sức chứa <span style={{ color: '#ff6b6b' }}>*</span>
                                 </label>
                                 <input
@@ -485,6 +555,12 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 
                 input:focus, select:focus {
                     border-color: #ff6b6b !important;
+                    box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.1);
+                }
+                
+                select option {
+                    background: #1a1a2e;
+                    color: white;
                 }
             `}</style>
         </div>

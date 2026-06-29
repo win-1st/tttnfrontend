@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart3, TrendingUp, DollarSign, ShoppingCart, Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+    BarChart3, TrendingUp, DollarSign, ShoppingCart, Download,
+    RefreshCw, AlertCircle, Calendar, Package, PieChart as PieChartIcon,
+    FileText, Percent, Users, Clock,
+} from 'lucide-react';
+import {
+    BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
+    CartesianGrid, Tooltip, ResponsiveContainer,
+    LineChart
+} from 'recharts';
 import styles from '../../layouts/AdminLayout.module.css';
-
 export default function Reports() {
     const [loading, setLoading] = useState(true);
     const [revenueData, setRevenueData] = useState([]);
@@ -57,7 +64,6 @@ export default function Reports() {
             console.log('Overview Data:', overviewData);
             console.log('Order Stats Data:', orderStatsData);
 
-            // 1. Xử lý dữ liệu doanh thu theo tháng
             const monthNames = ['Thg 1', 'Thg 2', 'Thg 3', 'Thg 4', 'Thg 5', 'Thg 6', 'Thg 7', 'Thg 8', 'Thg 9', 'Thg 10', 'Thg 11', 'Thg 12'];
             const processedData = [];
 
@@ -86,7 +92,6 @@ export default function Reports() {
                 }
             }
 
-            // Lấy 6 tháng gần nhất
             const currentMonth = new Date().getMonth() + 1;
             let last6Months = [];
             if (selectedYear === currentYear) {
@@ -97,7 +102,6 @@ export default function Reports() {
 
             setRevenueData(last6Months);
 
-            // 2. Xử lý tổng quan
             if (overviewData.success && overviewData.data) {
                 setTotalRevenue(overviewData.data.totalRevenue || 0);
                 setTotalOrders(overviewData.data.totalOrders || 0);
@@ -108,7 +112,6 @@ export default function Reports() {
                 }));
             }
 
-            // 3. Xử lý thống kê đơn hàng cho biểu đồ tròn
             if (orderStatsData.success && orderStatsData.data) {
                 const stats = orderStatsData.data;
 
@@ -309,12 +312,16 @@ export default function Reports() {
                         background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
-                        letterSpacing: '-0.5px'
+                        letterSpacing: '-0.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
                     }}>
+                        <BarChart3 size={32} color="var(--color-primary)" />
                         Phân tích doanh thu và đơn hàng
                     </h2>
-                    <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>
-                        Phân tích doanh thu và đơn hàng
+                    <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={14} /> Phân tích doanh thu và đơn hàng
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -389,8 +396,8 @@ export default function Reports() {
                 <div className={styles.card}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px' }}>
-                                Tổng doanh thu ({selectedYear})
+                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <DollarSign size={14} /> Tổng doanh thu ({selectedYear})
                             </p>
                             <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0', color: 'var(--color-primary)' }}>
                                 {formatCurrency(totalRevenue)}
@@ -417,8 +424,8 @@ export default function Reports() {
                 <div className={styles.card}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px' }}>
-                                Tổng đơn hàng ({selectedYear})
+                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <ShoppingCart size={14} /> Tổng đơn hàng ({selectedYear})
                             </p>
                             <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0' }}>
                                 {formatNumber(totalOrders)}
@@ -445,8 +452,8 @@ export default function Reports() {
                 <div className={styles.card}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px' }}>
-                                Giá trị TB/Đơn
+                            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Percent size={14} /> Giá trị TB/Đơn
                             </p>
                             <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0' }}>
                                 {formatCurrency(avgOrderValue)}
@@ -481,8 +488,8 @@ export default function Reports() {
                 {/* Revenue Chart */}
                 <div className={styles.card}>
                     <div style={{ marginBottom: '20px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
-                            Doanh thu 6 tháng gần đây
+                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <TrendingUp size={18} color="var(--color-primary)" /> Doanh thu 6 tháng gần đây
                         </h3>
                         <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
                             Theo dõi xu hướng doanh thu
@@ -527,8 +534,8 @@ export default function Reports() {
                 {/* Order Status Pie Chart */}
                 <div className={styles.card}>
                     <div style={{ marginBottom: '20px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
-                            Đơn hàng theo trạng thái
+                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <PieChartIcon size={18} color="#8B5CF6" /> Đơn hàng theo trạng thái
                         </h3>
                         <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
                             Phân bổ trạng thái đơn hàng

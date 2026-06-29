@@ -1,6 +1,6 @@
 // pages/client/WalletPage.js
 import React, { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, History, CreditCard, DollarSign, Award, Clock } from 'lucide-react';
+import { Wallet, TrendingUp, History, CreditCard, DollarSign, Award } from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import ToastNotification from '../../components/ToastNotification';
 import './WalletPage.css';
@@ -18,23 +18,34 @@ const WalletPage = () => {
     };
 
     useEffect(() => {
-        fetchWalletInfo();
-        fetchTransactions();
+        const token = localStorage.getItem('token');
+        if (token) {
+            fetchWalletInfo();
+            fetchTransactions();
+        } else {
+            showToast('Vui lòng đăng nhập để xem điểm thưởng', 'error');
+            setLoading(false);
+            setWallet({ totalPoints: 0 });
+        }
     }, []);
 
     const fetchWalletInfo = async () => {
         try {
             const response = await axiosClient.get('/customer-points/me');
             console.log('Wallet response:', response.data);
-            if (response.data?.success) {
-                setWallet(response.data.data);
+
+            // ✅ Lấy data từ response
+            const responseData = response.data;
+            if (responseData?.success) {
+                // ✅ Nếu data có totalPoints thì dùng, không thì tạo mới
+                if (responseData.data) {
+                    setWallet(responseData.data);
+                    console.log('Wallet set:', responseData.data);
+                } else {
+                    setWallet({ totalPoints: 0 });
+                }
             } else {
-                // Nếu chưa có ví, tạo mới
-                setWallet({
-                    points: 0,
-                    totalSpent: 0,
-                    hoursPlayed: 0
-                });
+                setWallet({ totalPoints: 0 });
             }
         } catch (error) {
             console.error('Error fetching wallet:', error);
@@ -43,12 +54,7 @@ const WalletPage = () => {
             } else {
                 showToast('Không thể tải thông tin điểm thưởng', 'error');
             }
-            // Set default wallet
-            setWallet({
-                points: 0,
-                totalSpent: 0,
-                hoursPlayed: 0
-            });
+            setWallet({ totalPoints: 0 });
         }
     };
 
@@ -57,8 +63,12 @@ const WalletPage = () => {
         try {
             const response = await axiosClient.get('/customer-points/transactions');
             console.log('Transactions response:', response.data);
-            if (response.data?.success) {
-                setTransactions(response.data.data || []);
+
+            const responseData = response.data;
+            if (responseData?.success) {
+                setTransactions(responseData.data || []);
+            } else {
+                setTransactions([]);
             }
         } catch (error) {
             console.error('Error fetching transactions:', error);
@@ -135,28 +145,9 @@ const WalletPage = () => {
                         <h2>Điểm thưởng</h2>
                     </div>
                     <div className="wallet-balance">
-                        <span className="balance-amount">{wallet?.points?.toLocaleString('vi-VN') || 0}</span>
+                        {/* ✅ Đổi từ points -> totalPoints */}
+                        <span className="balance-amount">{wallet?.totalPoints?.toLocaleString('vi-VN') || 0}</span>
                         <span className="balance-label">điểm</span>
-                    </div>
-                    <div className="wallet-stats">
-                        <div className="stat-item">
-                            <div className="stat-icon">
-                                <TrendingUp size={16} />
-                            </div>
-                            <div className="stat-info">
-                                <span className="stat-label">Tổng chi tiêu</span>
-                                <span className="stat-value">{formatCurrency(wallet?.totalSpent || 0)}</span>
-                            </div>
-                        </div>
-                        <div className="stat-item">
-                            <div className="stat-icon">
-                                <Clock size={16} />
-                            </div>
-                            <div className="stat-info">
-                                <span className="stat-label">Tổng giờ chơi</span>
-                                <span className="stat-value">{wallet?.hoursPlayed || 0} giờ</span>
-                            </div>
-                        </div>
                     </div>
                     <div className="wallet-note">
                         <CreditCard size={14} />
@@ -211,7 +202,7 @@ const WalletPage = () => {
                 <div className="info-note">
                     <p>💡 Cách tích điểm:</p>
                     <ul>
-                        <li>✓ Mỗi 1,000đ chi tiêu được 1 điểm</li>
+                        <li>✓ Mỗi 10,000đ chi tiêu được 1 điểm</li>
                         <li>✓ Điểm có thể đổi thành ưu đãi hoặc khuyến mãi</li>
                         <li>✓ Điểm sẽ hết hạn sau 12 tháng</li>
                     </ul>

@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Search, Filter, Eye, Printer, Calendar, ChevronLeft, ChevronRight, DollarSign, Download, RefreshCw } from "lucide-react";
+import {
+    Search, Filter, Eye, Printer, Calendar,
+    ChevronLeft, ChevronRight, DollarSign, Download, RefreshCw,
+    FileText, CreditCard, Smartphone, Landmark, Clock,
+    CheckCircle, XCircle, AlertCircle, Tag, Hash,
+    Receipt, ShoppingBag, User, Phone, Mail,
+    Award, TrendingUp, BarChart3, PieChart,
+    X, Trash2, Edit2, Plus, Minus, Wallet
+} from "lucide-react";
 import axiosClient from "../../../services/axiosClient";
 import styles from "./BillPage.module.css";
 
@@ -27,7 +35,6 @@ const BillPage = () => {
                 allBills = [];
             }
 
-            // Lọc theo tìm kiếm
             if (filter.search) {
                 allBills = allBills.filter(bill =>
                     bill.id?.toString().includes(filter.search) ||
@@ -35,12 +42,10 @@ const BillPage = () => {
                 );
             }
 
-            // Lọc theo trạng thái
             if (filter.status !== 'all') {
                 allBills = allBills.filter(bill => bill.paymentStatus === filter.status);
             }
 
-            // Lọc theo ngày
             if (filter.startDate) {
                 allBills = allBills.filter(bill => bill.createdAt?.split('T')[0] >= filter.startDate);
             }
@@ -48,7 +53,6 @@ const BillPage = () => {
                 allBills = allBills.filter(bill => bill.createdAt?.split('T')[0] <= filter.endDate);
             }
 
-            // Sắp xếp
             allBills.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
             setTotalPages(Math.ceil(allBills.length / itemsPerPage));
@@ -74,20 +78,43 @@ const BillPage = () => {
 
     const getStatusBadge = (status) => {
         const statusMap = {
-            'PAID': { text: 'Đã thanh toán', color: '#10b981' },
-            'PENDING': { text: 'Chờ thanh toán', color: '#f59e0b' },
-            'CANCELLED': { text: 'Đã hủy', color: '#ef4444' }
+            'PAID': { text: 'Đã thanh toán', color: '#059669', bg: '#d1fae5', icon: <CheckCircle size={14} /> },
+            'PENDING': { text: 'Chờ thanh toán', color: '#d97706', bg: '#fef3c7', icon: <Clock size={14} /> },
+            'CANCELLED': { text: 'Đã hủy', color: '#dc2626', bg: '#fee2e2', icon: <XCircle size={14} /> }
         };
-        const s = statusMap[status] || { text: status, color: '#6b7280' };
-        return <span style={{ background: s.color + '20', color: s.color, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500' }}>{s.text}</span>;
+        const s = statusMap[status] || { text: status, color: '#6b7280', bg: '#f3f4f6', icon: <AlertCircle size={14} /> };
+        return (
+            <span className={styles.statusBadge} style={{
+                background: s.bg,
+                color: s.color,
+            }}>
+                {s.icon} {s.text}
+            </span>
+        );
     };
 
     const getPaymentMethodLabel = (method) => {
-        const methods = { 'CASH': '💵 Tiền mặt', 'MOMO': '📱 MoMo', 'PAYOS': '🏦 PayOS' };
+        const methods = {
+            'CASH': 'Tiền mặt',
+            'MOMO': 'MoMo',
+            'PAYOS': 'PayOS',
+            'BANKING': 'Chuyển khoản',
+            'CARD': 'Thẻ'
+        };
         return methods[method] || method;
     };
 
-    // Tính tổng tiền gốc (trước khuyến mãi)
+    const getPaymentMethodIcon = (method) => {
+        switch (method) {
+            case 'CASH': return <Wallet size={16} />;
+            case 'MOMO': return <Smartphone size={16} />;
+            case 'PAYOS': return <Landmark size={16} />;
+            case 'BANKING': return <Landmark size={16} />;
+            case 'CARD': return <CreditCard size={16} />;
+            default: return <CreditCard size={16} />;
+        }
+    };
+
     const getOriginalTotal = (bill) => {
         if (bill.items && bill.items.length > 0) {
             return bill.items.reduce((sum, item) => sum + ((item.unitPrice || item.price || 0) * (item.quantity || 1)), 0);
@@ -95,14 +122,12 @@ const BillPage = () => {
         return bill.totalAmount || 0;
     };
 
-    // Tính số tiền đã giảm
     const getDiscountAmount = (bill) => {
         const originalTotal = getOriginalTotal(bill);
         const finalTotal = bill.totalAmount || 0;
         return originalTotal - finalTotal;
     };
 
-    // Xem chi tiết
     const handleViewDetail = async (bill) => {
         try {
             const res = await axiosClient.get(`/bills/${bill.id}`);
@@ -114,7 +139,6 @@ const BillPage = () => {
         }
     };
 
-    // Thanh toán tiền mặt
     const handlePayCash = async (billId) => {
         try {
             await axiosClient.patch(`/bills/${billId}/pay-cash`);
@@ -128,67 +152,124 @@ const BillPage = () => {
     return (
         <div className={styles.container}>
             <div className={styles.header}>
-                <h2>📄 Quản lý Hóa đơn</h2>
+                <div>
+                    <h2 className={styles.pageTitle}>
+                        <FileText size={28} className={styles.titleIcon} />
+                        Quản lý Hóa đơn
+                    </h2>
+                    <p className={styles.pageSubtitle}>Quản lý và theo dõi tất cả hóa đơn của nhà hàng</p>
+                </div>
                 <button onClick={fetchBills} className={styles.refreshBtn}>
-                    <RefreshCw size={16} /> Làm mới
+                    <RefreshCw size={18} /> Làm mới
                 </button>
             </div>
 
             {/* Filters */}
             <div className={styles.filterSection}>
                 <div className={styles.filterRow}>
-                    <input type="text" placeholder="Tìm mã HD..." value={filter.search}
-                        onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-                        className={styles.searchInput} />
-                    <select value={filter.status}
+                    <div className={styles.searchWrapper}>
+                        <Search size={20} className={styles.searchIcon} />
+                        <input
+                            type="text"
+                            placeholder="Tìm kiếm theo mã hóa đơn..."
+                            value={filter.search}
+                            onChange={(e) => setFilter({ ...filter, search: e.target.value })}
+                            className={styles.searchInput}
+                        />
+                    </div>
+                    <select
+                        value={filter.status}
                         onChange={(e) => setFilter({ ...filter, status: e.target.value })}
-                        className={styles.selectInput}>
-                        <option value="all">Tất cả</option>
+                        className={styles.selectInput}
+                    >
+                        <option value="all">Tất cả trạng thái</option>
                         <option value="PAID">Đã thanh toán</option>
                         <option value="PENDING">Chờ thanh toán</option>
+                        <option value="CANCELLED">Đã hủy</option>
                     </select>
-                    <input type="date" value={filter.startDate}
-                        onChange={(e) => setFilter({ ...filter, startDate: e.target.value })}
-                        className={styles.dateInput} />
-                    <span style={{ color: '#64748b' }}>→</span>
-                    <input type="date" value={filter.endDate}
-                        onChange={(e) => setFilter({ ...filter, endDate: e.target.value })}
-                        className={styles.dateInput} />
+                    <div className={styles.dateGroup}>
+                        <input
+                            type="date"
+                            value={filter.startDate}
+                            onChange={(e) => setFilter({ ...filter, startDate: e.target.value })}
+                            className={styles.dateInput}
+                        />
+                        <span className={styles.dateSeparator}>→</span>
+                        <input
+                            type="date"
+                            value={filter.endDate}
+                            onChange={(e) => setFilter({ ...filter, endDate: e.target.value })}
+                            className={styles.dateInput}
+                        />
+                    </div>
                     {(filter.startDate || filter.endDate) && (
-                        <button onClick={() => setFilter({ ...filter, startDate: '', endDate: '' })}
-                            className={styles.clearBtn}>Xóa</button>
+                        <button
+                            onClick={() => setFilter({ ...filter, startDate: '', endDate: '' })}
+                            className={styles.clearBtn}
+                        >
+                            <X size={16} /> Xóa lọc
+                        </button>
                     )}
                 </div>
             </div>
 
             {/* Table */}
             <div className={styles.tableWrapper}>
-                {loading ? <div className={styles.loading}>Đang tải...</div> : (
+                {loading ? (
+                    <div className={styles.loading}>Đang tải dữ liệu...</div>
+                ) : bills.length === 0 ? (
+                    <div className={styles.emptyState}>
+                        <Receipt size={64} className={styles.emptyIcon} />
+                        <p className={styles.emptyText}>Không có hóa đơn nào</p>
+                        <p className={styles.emptySubText}>Hóa đơn sẽ hiển thị sau khi có giao dịch</p>
+                    </div>
+                ) : (
                     <table className={styles.table}>
                         <thead>
-                            <tr>
-                                <th>Mã HD</th>
-                                <th>Bàn</th>
-                                <th>Tổng tiền</th>
-                                <th>Phương thức</th>
-                                <th>Trạng thái</th>
-                                <th>Thời gian</th>
-                                <th>#</th>
+                            <tr className={styles.tableHeader}>
+                                <th><Hash size={14} /> Mã HD</th>
+                                <th><Tag size={14} /> Bàn</th>
+                                <th><DollarSign size={14} /> Tổng tiền</th>
+                                <th><CreditCard size={14} /> Phương thức</th>
+                                <th><CheckCircle size={14} /> Trạng thái</th>
+                                <th><Clock size={14} /> Thời gian</th>
+                                <th className={styles.thAction}>Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
                             {bills.map(bill => (
-                                <tr key={bill.id}>
-                                    <td>#{bill.id}</td>
-                                    <td>Bàn {bill.tableNumber || bill.order?.table?.number || bill.table?.number || '--'}</td>
-                                    <td style={{ color: '#ff6b6b', fontWeight: 600 }}>{formatCurrency(bill.totalAmount)}</td>
-                                    <td>{getPaymentMethodLabel(bill.paymentMethod)}</td>
-                                    <td>{getStatusBadge(bill.paymentStatus)}</td>
-                                    <td style={{ fontSize: 12 }}>{formatDateTime(bill.createdAt)}</td>
+                                <tr key={bill.id} className={styles.tableRow}>
+                                    <td className={styles.tdId}>#{bill.id}</td>
+                                    <td className={styles.tdTable}>
+                                        <span className={styles.tableBadge}>
+                                            Bàn {bill.tableNumber || bill.order?.table?.number || bill.table?.number || '--'}
+                                        </span>
+                                    </td>
+                                    <td className={styles.tdAmount}>{formatCurrency(bill.totalAmount)}</td>
                                     <td>
-                                        <button onClick={() => handleViewDetail(bill)} style={btnSmall}><Eye size={14} /></button>
+                                        <span className={styles.paymentMethod}>
+                                            {getPaymentMethodIcon(bill.paymentMethod)}
+                                            {getPaymentMethodLabel(bill.paymentMethod)}
+                                        </span>
+                                    </td>
+                                    <td>{getStatusBadge(bill.paymentStatus)}</td>
+                                    <td className={styles.tdTime}>{formatDateTime(bill.createdAt)}</td>
+                                    <td className={styles.tdAction}>
+                                        <button
+                                            onClick={() => handleViewDetail(bill)}
+                                            className={styles.actionBtn}
+                                            title="Xem chi tiết"
+                                        >
+                                            <Eye size={18} />
+                                        </button>
                                         {bill.paymentStatus === 'PENDING' && (
-                                            <button onClick={() => handlePayCash(bill.id)} style={{ ...btnSmall, background: '#10b981' }}><DollarSign size={14} /></button>
+                                            <button
+                                                onClick={() => handlePayCash(bill.id)}
+                                                className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}
+                                                title="Thanh toán"
+                                            >
+                                                <DollarSign size={18} />
+                                            </button>
                                         )}
                                     </td>
                                 </tr>
@@ -201,82 +282,141 @@ const BillPage = () => {
             {/* Pagination */}
             {totalPages > 1 && (
                 <div className={styles.pagination}>
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage === 1} className={styles.pageBtn}>
-                        <ChevronLeft size={16} />
+                    <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className={styles.pageBtn}
+                    >
+                        <ChevronLeft size={20} />
                     </button>
-                    <span className={styles.pageInfo}>Trang {currentPage} / {totalPages}</span>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages} className={styles.pageBtn}>
-                        <ChevronRight size={16} />
+                    <span className={styles.pageInfo}>
+                        Trang <strong>{currentPage}</strong> / {totalPages}
+                    </span>
+                    <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className={styles.pageBtn}
+                    >
+                        <ChevronRight size={20} />
                     </button>
                 </div>
             )}
 
-            {/* Detail Modal - Giữ hiển thị giảm giá */}
+            {/* Detail Modal */}
             {showDetailModal && selectedBill && (
-                <div style={overlayStyle} onClick={() => setShowDetailModal(false)}>
-                    <div style={{ ...modalStyle, maxWidth: 700 }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginBottom: 20, color: '#ff6b6b' }}>🧾 Chi tiết Hóa đơn #{selectedBill.id}</h3>
+                <div className={styles.modalOverlay} onClick={() => setShowDetailModal(false)}>
+                    <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <div className={styles.modalTitle}>
+                                <Receipt size={28} className={styles.modalTitleIcon} />
+                                <div>
+                                    <h3 className={styles.modalTitleText}>Chi tiết Hóa đơn</h3>
+                                    <span className={styles.modalTitleId}>#{selectedBill.id}</span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowDetailModal(false)}
+                                className={styles.modalCloseBtn}
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
 
-                        <div style={{ background: '#0f0f1a', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                            <div style={infoRow}><span>Mã đơn:</span><strong>#{selectedBill.orderId || '--'}</strong></div>
-                            <div style={infoRow}><span>Bàn:</span><strong>Bàn {selectedBill.tableNumber || '--'}</strong></div>
-                            <div style={infoRow}><span>Phương thức:</span><strong>{getPaymentMethodLabel(selectedBill.paymentMethod)}</strong></div>
-                            <div style={infoRow}><span>Trạng thái:</span><strong>{getStatusBadge(selectedBill.paymentStatus)}</strong></div>
-                            <div style={infoRow}><span>Thời gian:</span><strong>{formatDateTime(selectedBill.createdAt)}</strong></div>
+                        <div className={styles.modalInfo}>
+                            <div className={styles.infoGrid}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>
+                                        <Tag size={16} /> Mã đơn
+                                    </span>
+                                    <span className={styles.infoValue}>#{selectedBill.orderId || '--'}</span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>
+                                        <Tag size={16} /> Bàn
+                                    </span>
+                                    <span className={styles.infoValue}>Bàn {selectedBill.tableNumber || '--'}</span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>
+                                        <CreditCard size={16} /> Phương thức
+                                    </span>
+                                    <span className={styles.infoValue}>
+                                        {getPaymentMethodIcon(selectedBill.paymentMethod)} {getPaymentMethodLabel(selectedBill.paymentMethod)}
+                                    </span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>
+                                        <CheckCircle size={16} /> Trạng thái
+                                    </span>
+                                    <span className={styles.infoValue}>
+                                        {getStatusBadge(selectedBill.paymentStatus)}
+                                    </span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>
+                                        <Clock size={16} /> Thời gian
+                                    </span>
+                                    <span className={styles.infoValue}>{formatDateTime(selectedBill.createdAt)}</span>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Danh sách món */}
-                        <div style={{ background: '#0f0f1a', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                            <h4 style={{ color: '#94a3b8', marginBottom: 12, fontSize: 14 }}>📋 Danh sách món</h4>
+                        <div className={styles.modalItems}>
+                            <h4 className={styles.itemsTitle}>
+                                <ShoppingBag size={20} /> Danh sách món ăn
+                            </h4>
                             {selectedBill.items && selectedBill.items.length > 0 ? (
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <table className={styles.itemsTable}>
                                     <thead>
-                                        <tr style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                            <th style={{ padding: '8px', textAlign: 'left', color: '#64748b', fontSize: 12 }}>Tên món</th>
-                                            <th style={{ padding: '8px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>SL</th>
-                                            <th style={{ padding: '8px', textAlign: 'right', color: '#64748b', fontSize: 12 }}>Đơn giá</th>
-                                            <th style={{ padding: '8px', textAlign: 'right', color: '#64748b', fontSize: 12 }}>Thành tiền</th>
+                                        <tr className={styles.itemsTableHeader}>
+                                            <th>Tên món</th>
+                                            <th className={styles.itemsThCenter}>Số lượng</th>
+                                            <th className={styles.itemsThRight}>Đơn giá</th>
+                                            <th className={styles.itemsThRight}>Thành tiền</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {selectedBill.items.map((item, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                                <td style={{ padding: '8px', color: 'white', fontSize: 13 }}>{item.product?.name || item.name || `Món #${idx + 1}`}</td>
-                                                <td style={{ padding: '8px', textAlign: 'center', color: 'white', fontSize: 13 }}>x{item.quantity}</td>
-                                                <td style={{ padding: '8px', textAlign: 'right', color: '#94a3b8', fontSize: 13 }}>{formatCurrency(item.unitPrice || item.price)}</td>
-                                                <td style={{ padding: '8px', textAlign: 'right', color: '#ff6b6b', fontSize: 13, fontWeight: 600 }}>{formatCurrency((item.unitPrice || item.price) * item.quantity)}</td>
+                                            <tr key={idx} className={styles.itemsTableRow}>
+                                                <td className={styles.itemsTdName}>{item.product?.name || item.name || `Món #${idx + 1}`}</td>
+                                                <td className={styles.itemsTdCenter}>× {item.quantity}</td>
+                                                <td className={styles.itemsTdRight}>{formatCurrency(item.unitPrice || item.price)}</td>
+                                                <td className={styles.itemsTdRight}>{formatCurrency((item.unitPrice || item.price) * item.quantity)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             ) : (
-                                <p style={{ color: '#64748b', textAlign: 'center', padding: 10 }}>Không có món nào</p>
+                                <p className={styles.noItems}>Không có món nào trong hóa đơn</p>
                             )}
                         </div>
 
-                        {/* Tổng kết với giảm giá */}
-                        <div style={{ background: '#0f0f1a', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                            <div style={infoRow}>
-                                <span>Tổng tiền món:</span>
-                                <strong>{formatCurrency(getOriginalTotal(selectedBill))}</strong>
+                        {/* Tổng kết */}
+                        <div className={styles.modalTotal}>
+                            <div className={styles.totalRow}>
+                                <span className={styles.totalLabel}>Tổng tiền món:</span>
+                                <span className={styles.totalValue}>{formatCurrency(getOriginalTotal(selectedBill))}</span>
                             </div>
                             {getDiscountAmount(selectedBill) > 0 && (
-                                <div style={infoRow}>
-                                    <span style={{ color: '#10b981' }}>🎉 Khuyến mãi giảm:</span>
-                                    <strong style={{ color: '#10b981' }}>-{formatCurrency(getDiscountAmount(selectedBill))}</strong>
+                                <div className={styles.totalRow}>
+                                    <span className={styles.totalDiscountLabel}>
+                                        <Award size={16} /> Khuyến mãi giảm:
+                                    </span>
+                                    <span className={styles.totalDiscountValue}>-{formatCurrency(getDiscountAmount(selectedBill))}</span>
                                 </div>
                             )}
-                            <div style={{ ...infoRow, borderTop: '2px solid #2d2d3d', paddingTop: 12, marginTop: 8 }}>
-                                <span style={{ fontSize: 16 }}>THỰC THU:</span>
-                                <strong style={{ color: '#ff6b6b', fontSize: 18 }}>{formatCurrency(selectedBill.totalAmount)}</strong>
+                            <div className={styles.totalRowFinal}>
+                                <span className={styles.totalFinalLabel}>THỰC THU</span>
+                                <span className={styles.totalFinalValue}>{formatCurrency(selectedBill.totalAmount)}</span>
                             </div>
                         </div>
 
-                        <button onClick={() => setShowDetailModal(false)}
-                            style={{ width: '100%', padding: 12, background: '#2d2d3d', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                            Đóng
+                        <button
+                            onClick={() => setShowDetailModal(false)}
+                            className={styles.modalCloseButton}
+                        >
+                            <X size={18} /> Đóng
                         </button>
                     </div>
                 </div>
@@ -284,10 +424,5 @@ const BillPage = () => {
         </div>
     );
 };
-
-const btnSmall = { padding: '6px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', marginRight: 4 };
-const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 };
-const modalStyle = { background: '#1a1a2e', borderRadius: 16, padding: 24, width: 500, maxWidth: '90%', color: 'white' };
-const infoRow = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #2d2d3d', color: '#94a3b8', fontSize: 14 };
 
 export default BillPage;

@@ -1,6 +1,15 @@
 // pages/client/BookingHistoryPage.js
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, MapPin, Search, Eye, XCircle, CheckCircle, Filter, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+    Calendar, Clock, Users, MapPin, Search, Eye,
+    XCircle, CheckCircle, Filter, AlertCircle,
+    FileText, User, Phone, Mail, Table,
+    ChevronRight, Clock as ClockIcon,
+    Calendar as CalendarIcon, UserCheck, UserX,
+    List, BookOpen, Trash2, RefreshCw,
+    TrendingUp, Award, Star, Zap,
+    MessageCircle, Info, ChevronLeft
+} from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import ToastNotification from '../../components/ToastNotification';
 import './BookingHistoryPage.css';
@@ -33,11 +42,9 @@ const BookingHistoryPage = () => {
     const fetchMyReservations = async () => {
         setLoading(true);
         try {
-            // Lấy thông tin user từ localStorage
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             console.log('User info:', user);
 
-            // Kiểm tra token có tồn tại không
             const token = localStorage.getItem('token');
             if (!token) {
                 console.log('No token found, user not logged in');
@@ -47,13 +54,11 @@ const BookingHistoryPage = () => {
                 return;
             }
 
-            // Gọi API lấy lịch sử đặt bàn theo tài khoản
             const response = await axiosClient.get('/reservations/my-reservations');
             console.log('My reservations response:', response.data);
 
             if (response.data?.success) {
                 const data = response.data.data || [];
-                // Sắp xếp theo ngày mới nhất
                 const sorted = data.sort((a, b) =>
                     new Date(b.createdAt || b.reservationDate) - new Date(a.createdAt || a.reservationDate)
                 );
@@ -79,12 +84,10 @@ const BookingHistoryPage = () => {
     const filterReservations = () => {
         let filtered = [...reservations];
 
-        // Lọc theo trạng thái
         if (statusFilter !== 'all') {
             filtered = filtered.filter(r => r.status === statusFilter);
         }
 
-        // Lọc theo từ khóa tìm kiếm
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(r =>
@@ -146,7 +149,6 @@ const BookingHistoryPage = () => {
     const canCancel = (status, date, time) => {
         if (status !== 'PENDING' && status !== 'CONFIRMED') return false;
 
-        // Kiểm tra nếu đã quá giờ đặt
         try {
             const reservationDateTime = new Date(`${date}T${time || '00:00'}`);
             const now = new Date();
@@ -160,14 +162,14 @@ const BookingHistoryPage = () => {
 
     const getStatusBadge = (status) => {
         const statusConfig = {
-            'PENDING': { text: 'Chờ xác nhận', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: '⏳' },
-            'CONFIRMED': { text: 'Đã xác nhận', color: '#10B981', bg: 'rgba(16,185,129,0.1)', icon: '✅' },
-            'CHECKED_IN': { text: 'Đã đến', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', icon: '📍' },
-            'CANCELLED': { text: 'Đã hủy', color: '#EF4444', bg: 'rgba(239,68,68,0.1)', icon: '❌' },
-            'COMPLETED': { text: 'Hoàn thành', color: '#6B7280', bg: 'rgba(107,114,128,0.1)', icon: '✔️' },
-            'NO_SHOW': { text: 'No-show', color: '#DC2626', bg: 'rgba(220,38,38,0.1)', icon: '🚫' }
+            'PENDING': { text: 'Chờ xác nhận', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: <Clock size={14} /> },
+            'CONFIRMED': { text: 'Đã xác nhận', color: '#10B981', bg: 'rgba(16,185,129,0.1)', icon: <CheckCircle size={14} /> },
+            'CHECKED_IN': { text: 'Đã đến', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', icon: <MapPin size={14} /> },
+            'CANCELLED': { text: 'Đã hủy', color: '#EF4444', bg: 'rgba(239,68,68,0.1)', icon: <XCircle size={14} /> },
+            'COMPLETED': { text: 'Hoàn thành', color: '#6B7280', bg: 'rgba(107,114,128,0.1)', icon: <CheckCircle size={14} /> },
+            'NO_SHOW': { text: 'No-show', color: '#DC2626', bg: 'rgba(220,38,38,0.1)', icon: <UserX size={14} /> }
         };
-        const config = statusConfig[status] || { text: status, color: '#6B7280', bg: 'rgba(107,114,128,0.1)', icon: '📋' };
+        const config = statusConfig[status] || { text: status, color: '#6B7280', bg: 'rgba(107,114,128,0.1)', icon: <FileText size={14} /> };
 
         return (
             <span className="status-badge" style={{ background: config.bg, color: config.color }}>
@@ -204,36 +206,39 @@ const BookingHistoryPage = () => {
         <div className="booking-history-page">
             <div className="history-container">
                 <div className="history-header">
-                    <h1>📋 Lịch sử đặt bàn</h1>
+                    <h1>
+                        <BookOpen size={32} className="header-icon" />
+                        Lịch sử đặt bàn
+                    </h1>
                     <p>Xem lại các đơn đặt bàn của bạn tại nhà hàng</p>
                 </div>
 
                 {/* Stats Cards */}
                 {reservations.length > 0 && (
                     <div className="stats-grid">
-                        <div className="stat-card">
-                            <div className="stat-icon total">📊</div>
+                        <div className="stat-card total">
+                            <div className="stat-icon"><List size={24} /></div>
                             <div className="stat-info">
                                 <span className="stat-value">{stats.total}</span>
                                 <span className="stat-label">Tổng đặt bàn</span>
                             </div>
                         </div>
                         <div className="stat-card pending">
-                            <div className="stat-icon">⏳</div>
+                            <div className="stat-icon"><Clock size={24} /></div>
                             <div className="stat-info">
                                 <span className="stat-value">{stats.pending}</span>
                                 <span className="stat-label">Đang chờ</span>
                             </div>
                         </div>
                         <div className="stat-card confirmed">
-                            <div className="stat-icon">✅</div>
+                            <div className="stat-icon"><CheckCircle size={24} /></div>
                             <div className="stat-info">
                                 <span className="stat-value">{stats.confirmed}</span>
                                 <span className="stat-label">Đã xác nhận</span>
                             </div>
                         </div>
                         <div className="stat-card completed">
-                            <div className="stat-icon">✔️</div>
+                            <div className="stat-icon"><Award size={24} /></div>
                             <div className="stat-info">
                                 <span className="stat-value">{stats.completed}</span>
                                 <span className="stat-label">Đã hoàn thành</span>
@@ -246,7 +251,7 @@ const BookingHistoryPage = () => {
                 {reservations.length > 0 && (
                     <div className="filters-section">
                         <div className="search-box">
-                            <Search size={18} />
+                            <Search size={18} className="search-icon" />
                             <input
                                 type="text"
                                 placeholder="Tìm theo mã đơn, tên, SĐT hoặc số bàn..."
@@ -276,14 +281,17 @@ const BookingHistoryPage = () => {
 
                 {reservations.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-icon">📭</div>
+                        <div className="empty-icon"><Calendar size={56} /></div>
                         <h3>Chưa có đặt bàn nào</h3>
                         <p>Bạn chưa có đơn đặt bàn nào. Hãy đặt bàn ngay để trải nghiệm!</p>
-                        <a href="/booking" className="booking-btn">Đặt bàn ngay</a>
+                        <a href="/dat-ban" className="booking-btn">
+                            <Calendar size={16} />
+                            Đặt bàn ngay
+                        </a>
                     </div>
                 ) : filteredReservations.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-icon">🔍</div>
+                        <div className="empty-icon"><Search size={56} /></div>
                         <h3>Không tìm thấy</h3>
                         <p>Không có đặt bàn nào phù hợp với điều kiện tìm kiếm</p>
                     </div>
@@ -302,17 +310,17 @@ const BookingHistoryPage = () => {
                                 <div className="reservation-body">
                                     <div className="info-row">
                                         <div className="info-item">
-                                            <Calendar size={16} />
+                                            <CalendarIcon size={16} />
                                             <span>{formatDate(res.reservationDate)}</span>
                                         </div>
                                         <div className="info-item">
-                                            <Clock size={16} />
+                                            <ClockIcon size={16} />
                                             <span>{res.reservationTime || '--:--'}</span>
                                         </div>
                                     </div>
                                     <div className="info-row">
                                         <div className="info-item">
-                                            <MapPin size={16} />
+                                            <Table size={16} />
                                             <span>Bàn {res.tableNumber || res.table?.number || '--'}</span>
                                         </div>
                                         <div className="info-item">
@@ -322,21 +330,24 @@ const BookingHistoryPage = () => {
                                     </div>
                                     <div className="info-row">
                                         <div className="info-item">
+                                            <User size={16} />
                                             <span className="customer-name">{res.customerName || 'Khách lẻ'}</span>
                                         </div>
                                         <div className="info-item">
+                                            <Phone size={16} />
                                             <span className="customer-phone">{res.customerPhone || '---'}</span>
                                         </div>
                                     </div>
                                     {res.notes && (
                                         <div className="info-row note">
-                                            <span>📝 Ghi chú: {res.notes}</span>
+                                            <span><MessageCircle size={14} /> Ghi chú: {res.notes}</span>
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="reservation-footer">
                                     <span className="created-at">
+                                        <Clock size={14} />
                                         Đặt lúc: {formatDateTime(res.createdAt)}
                                     </span>
                                     <div className="footer-actions">
@@ -369,7 +380,10 @@ const BookingHistoryPage = () => {
                 <div className="modal-overlay" onClick={() => setShowDetailModal(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Chi tiết đặt bàn #{selectedReservation.id}</h3>
+                            <h3>
+                                <FileText size={20} />
+                                Chi tiết đặt bàn #{selectedReservation.id}
+                            </h3>
                             <button onClick={() => setShowDetailModal(false)} className="close-btn">
                                 <XCircle size={20} />
                             </button>
@@ -380,38 +394,38 @@ const BookingHistoryPage = () => {
                                 {getStatusBadge(selectedReservation.status)}
                             </div>
                             <div className="detail-row">
-                                <span className="label">Khách hàng:</span>
+                                <span className="label"><User size={16} /> Khách hàng:</span>
                                 <span>{selectedReservation.customerName || 'Khách lẻ'}</span>
                             </div>
                             <div className="detail-row">
-                                <span className="label">Số điện thoại:</span>
+                                <span className="label"><Phone size={16} /> Số điện thoại:</span>
                                 <span>{selectedReservation.customerPhone || '---'}</span>
                             </div>
                             {selectedReservation.customerEmail && (
                                 <div className="detail-row">
-                                    <span className="label">Email:</span>
+                                    <span className="label"><Mail size={16} /> Email:</span>
                                     <span>{selectedReservation.customerEmail}</span>
                                 </div>
                             )}
                             <div className="detail-row">
-                                <span className="label">Bàn:</span>
+                                <span className="label"><Table size={16} /> Bàn:</span>
                                 <span>Bàn {selectedReservation.tableNumber || selectedReservation.table?.number || '--'}</span>
                             </div>
                             <div className="detail-row">
-                                <span className="label">Số khách:</span>
+                                <span className="label"><Users size={16} /> Số khách:</span>
                                 <span>{selectedReservation.numberOfGuests || 2} người</span>
                             </div>
                             <div className="detail-row">
-                                <span className="label">Ngày đặt:</span>
+                                <span className="label"><Calendar size={16} /> Ngày đặt:</span>
                                 <span>{formatDate(selectedReservation.reservationDate)} - {selectedReservation.reservationTime || '--:--'}</span>
                             </div>
                             <div className="detail-row">
-                                <span className="label">Ngày đặt đơn:</span>
+                                <span className="label"><Clock size={16} /> Ngày đặt đơn:</span>
                                 <span>{formatDateTime(selectedReservation.createdAt)}</span>
                             </div>
                             {selectedReservation.notes && (
                                 <div className="detail-row">
-                                    <span className="label">Ghi chú:</span>
+                                    <span className="label"><MessageCircle size={16} /> Ghi chú:</span>
                                     <span className="note-text">{selectedReservation.notes}</span>
                                 </div>
                             )}
@@ -429,11 +443,6 @@ const BookingHistoryPage = () => {
                     </div>
                 </div>
             )}
-
-            {/* Refresh Button */}
-            <button className="refresh-btn" onClick={fetchMyReservations} disabled={loading}>
-                <RefreshCw size={18} className={loading ? 'spin' : ''} />
-            </button>
 
             {/* Toast */}
             <div className="toast-container">

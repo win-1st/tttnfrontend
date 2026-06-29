@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Download, DollarSign, CreditCard, Clock, CheckCircle, XCircle, AlertCircle, Calendar, Search, Eye, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+    FileText, Download, DollarSign, CreditCard, Clock,
+    CheckCircle, XCircle, AlertCircle, Calendar, Search,
+    Eye, RefreshCw, ChevronLeft, ChevronRight,
+    Receipt, Printer, Truck, User, Phone, Mail,
+    Tag, Hash, Grid, List, Filter, Plus, Trash2
+} from 'lucide-react';
 import axios from 'axios';
+import ToastNotification from '../../components/ToastNotification';
 
 export default function BillsAndAuditSystem() {
     const [bills, setBills] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selectedBill, setSelectedBill] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
+    const [toast, setToast] = useState(null);
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -20,6 +28,13 @@ export default function BillsAndAuditSystem() {
     const itemsPerPage = 10;
 
     const API_BASE_URL = 'http://localhost:8080';
+
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, duration });
+        setTimeout(() => {
+            setToast(null);
+        }, duration);
+    };
 
     useEffect(() => {
         fetchData();
@@ -48,6 +63,7 @@ export default function BillsAndAuditSystem() {
             setCurrentPage(1);
         } catch (error) {
             console.error('Lỗi khi tải dữ liệu:', error);
+            showToast('Không thể tải danh sách hóa đơn!', 'error');
             setBills(getMockBills());
         } finally {
             setLoading(false);
@@ -127,10 +143,10 @@ export default function BillsAndAuditSystem() {
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            alert(`Đã xuất hóa đơn #${billId} thành công!`);
+            showToast(`Đã xuất hóa đơn #${billId} thành công!`, 'success');
         } catch (error) {
             console.error('Lỗi khi xuất PDF:', error);
-            alert('Không thể xuất hóa đơn. Vui lòng thử lại!');
+            showToast('Không thể xuất hóa đơn. Vui lòng thử lại!', 'error');
         }
     };
 
@@ -211,7 +227,6 @@ export default function BillsAndAuditSystem() {
             setShowDetailModal(true);
         } catch (error) {
             console.error('Lỗi khi tải chi tiết:', error);
-            // Fallback to bill data from list
             setSelectedBill(bill);
             setShowDetailModal(true);
         }
@@ -230,12 +245,22 @@ export default function BillsAndAuditSystem() {
         return originalTotal - finalTotal;
     };
 
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'PENDING': return <Clock size={14} />;
+            case 'PAID': return <CheckCircle size={14} />;
+            case 'FAILED': return <XCircle size={14} />;
+            case 'REFUNDED': return <AlertCircle size={14} />;
+            default: return <Clock size={14} />;
+        }
+    };
+
     const getPaymentStatusColor = (status) => {
         const colors = {
-            PENDING: { bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)', text: '#FBBF24', icon: Clock },
-            PAID: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#10B981', icon: CheckCircle },
-            FAILED: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#EF4444', icon: XCircle },
-            REFUNDED: { bg: 'rgba(139, 92, 246, 0.1)', border: 'rgba(139, 92, 246, 0.3)', text: '#8B5CF6', icon: AlertCircle }
+            PENDING: { bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)', text: '#FBBF24' },
+            PAID: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#10B981' },
+            FAILED: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#EF4444' },
+            REFUNDED: { bg: 'rgba(139, 92, 246, 0.1)', border: 'rgba(139, 92, 246, 0.3)', text: '#8B5CF6' }
         };
         return colors[status] || colors.PENDING;
     };
@@ -262,14 +287,14 @@ export default function BillsAndAuditSystem() {
     };
 
     const getPaymentMethodIcon = (method) => {
-        const icons = {
-            CASH: '💵',
-            MOMO: '📱',
-            PAYOS: '🏦',
-            CARD: '💳',
-            BANKING: '🏦'
-        };
-        return icons[method] || '💳';
+        switch (method) {
+            case 'CASH': return <DollarSign size={14} />;
+            case 'MOMO': return <Phone size={14} />;
+            case 'PAYOS': return <CreditCard size={14} />;
+            case 'CARD': return <CreditCard size={14} />;
+            case 'BANKING': return <Truck size={14} />;
+            default: return <CreditCard size={14} />;
+        }
     };
 
     const formatDateTime = (dateTime) => {
@@ -327,6 +352,25 @@ export default function BillsAndAuditSystem() {
 
     return (
         <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '24px' }}>
+            {/* Toast Notification */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    width: '100%'
+                }}>
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        duration={toast.duration}
+                        onClose={() => setToast(null)}
+                    />
+                </div>
+            )}
+
             {/* Header */}
             <div style={{
                 padding: '32px 24px',
@@ -343,12 +387,15 @@ export default function BillsAndAuditSystem() {
                             marginBottom: '8px',
                             background: 'linear-gradient(135deg, #8B5CF6, #A78BFA)',
                             WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent'
+                            WebkitTextFillColor: 'transparent',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px'
                         }}>
-                            📄 Quản lý Hóa đơn
+                            <FileText size={32} color="#8B5CF6" /> Quản lý Hóa đơn
                         </h1>
-                        <p style={{ color: '#94A3B8', fontSize: '14px' }}>
-                            Quản lý và xuất hóa đơn thanh toán
+                        <p style={{ color: '#94A3B8', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Receipt size={14} /> Quản lý và xuất hóa đơn thanh toán
                         </p>
                     </div>
                     <button
@@ -540,12 +587,24 @@ export default function BillsAndAuditSystem() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
                     <thead>
                         <tr style={{ background: '#0F0F0F', borderBottom: '1px solid #2D2D2D' }}>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Mã HĐ</th>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Bàn</th>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Tổng tiền</th>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Phương thức</th>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Trạng thái</th>
-                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Thời gian</th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <Hash size={12} style={{ marginRight: 4 }} /> Mã HĐ
+                            </th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <Tag size={12} style={{ marginRight: 4 }} /> Bàn
+                            </th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <DollarSign size={12} style={{ marginRight: 4 }} /> Tổng tiền
+                            </th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <CreditCard size={12} style={{ marginRight: 4 }} /> Phương thức
+                            </th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <CheckCircle size={12} style={{ marginRight: 4 }} /> Trạng thái
+                            </th>
+                            <th style={{ padding: '16px', textAlign: 'left', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>
+                                <Clock size={12} style={{ marginRight: 4 }} /> Thời gian
+                            </th>
                             <th style={{ padding: '16px', textAlign: 'center', color: '#94A3B8', fontWeight: '600', fontSize: '13px' }}>Thao tác</th>
                         </tr>
                     </thead>
@@ -560,8 +619,6 @@ export default function BillsAndAuditSystem() {
                         ) : (
                             paginatedBills.map((bill) => {
                                 const statusColor = getPaymentStatusColor(bill.paymentStatus);
-                                const StatusIcon = statusColor.icon;
-                                const methodIcon = getPaymentMethodIcon(bill.paymentMethod);
 
                                 return (
                                     <tr key={bill.id} style={{ borderBottom: '1px solid #2D2D2D' }}>
@@ -580,8 +637,8 @@ export default function BillsAndAuditSystem() {
                                                 fontSize: '12px',
                                                 color: '#3B82F6'
                                             }}>
-                                                <span>{methodIcon}</span>
-                                                {getPaymentMethodText(bill.paymentMethod)}
+                                                {getPaymentMethodIcon(bill.paymentMethod)}
+                                                <span>{getPaymentMethodText(bill.paymentMethod)}</span>
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px' }}>
@@ -597,8 +654,8 @@ export default function BillsAndAuditSystem() {
                                                 fontWeight: '600',
                                                 color: statusColor.text
                                             }}>
-                                                <StatusIcon size={14} />
-                                                {getPaymentStatusText(bill.paymentStatus)}
+                                                {getStatusIcon(bill.paymentStatus)}
+                                                <span>{getPaymentStatusText(bill.paymentStatus)}</span>
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px', color: '#94A3B8', fontSize: '13px' }}>
@@ -692,7 +749,7 @@ export default function BillsAndAuditSystem() {
                 </div>
             )}
 
-            {/* Detail Modal - Giống BillPage */}
+            {/* Detail Modal */}
             {showDetailModal && selectedBill && (
                 <div style={{
                     position: 'fixed',
@@ -718,8 +775,8 @@ export default function BillsAndAuditSystem() {
                         color: 'white'
                     }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#FF6B6B', margin: 0 }}>
-                                🧾 Chi tiết Hóa đơn #{selectedBill.id}
+                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#FF6B6B', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Receipt size={22} /> Chi tiết Hóa đơn #{selectedBill.id}
                             </h3>
                             <button
                                 onClick={() => setShowDetailModal(false)}
@@ -751,7 +808,10 @@ export default function BillsAndAuditSystem() {
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #2D2D3D' }}>
                                 <span style={{ color: '#94A3B8' }}>Phương thức:</span>
-                                <strong>{getPaymentMethodIcon(selectedBill.paymentMethod)} {getPaymentMethodText(selectedBill.paymentMethod)}</strong>
+                                <strong>
+                                    {getPaymentMethodIcon(selectedBill.paymentMethod)}
+                                    <span style={{ marginLeft: 4 }}>{getPaymentMethodText(selectedBill.paymentMethod)}</span>
+                                </strong>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #2D2D3D' }}>
                                 <span style={{ color: '#94A3B8' }}>Trạng thái:</span>
@@ -767,7 +827,9 @@ export default function BillsAndAuditSystem() {
 
                         {/* Danh sách món */}
                         <div style={{ background: '#0F0F1A', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-                            <h4 style={{ color: '#94A3B8', marginBottom: '12px', fontSize: '14px' }}>📋 Danh sách món</h4>
+                            <h4 style={{ color: '#94A3B8', marginBottom: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Receipt size={14} /> Danh sách món
+                            </h4>
                             {(selectedBill.items && selectedBill.items.length > 0) ? (
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
@@ -796,7 +858,7 @@ export default function BillsAndAuditSystem() {
                             )}
                         </div>
 
-                        {/* Tổng kết với giảm giá */}
+                        {/* Tổng kết */}
                         <div style={{ background: '#0F0F1A', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #2D2D3D' }}>
                                 <span style={{ color: '#94A3B8' }}>Tổng tiền món:</span>
@@ -804,7 +866,7 @@ export default function BillsAndAuditSystem() {
                             </div>
                             {getDiscountAmount(selectedBill) > 0 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #2D2D3D' }}>
-                                    <span style={{ color: '#10B981' }}>🎉 Khuyến mãi giảm:</span>
+                                    <span style={{ color: '#10B981' }}>Khuyến mãi giảm:</span>
                                     <strong style={{ color: '#10B981' }}>-{formatCurrency(getDiscountAmount(selectedBill))}</strong>
                                 </div>
                             )}
