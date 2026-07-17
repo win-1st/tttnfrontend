@@ -87,21 +87,23 @@ const LoginPage = () => {
 
             const { id, phone: userPhone, fullName, email, roles } = res.data;
 
+            // ✅ Lấy role từ roles array
+            let role = "";
+            if (roles && roles.length > 0) {
+                role = roles[0].replace("ROLE_", "");
+            }
+
+            // ✅ Lưu user với role là string
             const user = {
                 id: id,
                 phone: userPhone || phone,
                 fullName: fullName || "",
                 email: email || "",
-                roles: roles || [],
+                role: role,  // ✅ Lưu role dạng string
                 password: rememberMe ? password : ""
             };
 
             localStorage.setItem("user", JSON.stringify(user));
-
-            let role = "";
-            if (roles && roles.length > 0) {
-                role = roles[0].replace("ROLE_", "");
-            }
 
             showToast("Đăng nhập thành công!", "success");
 

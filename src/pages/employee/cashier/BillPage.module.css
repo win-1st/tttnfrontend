@@ -794,3 +794,134 @@
         padding: 4px 8px;
     }
 }
+
+/* =========================
+   ACTION BUTTONS
+   ========================= */
+
+.actionBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #6b7280;
+    background: #f3f4f6;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+}
+
+.actionBtn:hover {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.actionBtnPrint {
+    color: #2563eb;
+    background: #eff6ff;
+}
+
+.actionBtnPrint:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.actionBtnSuccess {
+    color: #059669;
+    background: #d1fae5;
+}
+
+.actionBtnSuccess:hover {
+    background: #a7f3d0;
+    color: #047857;
+}
+
+/* =========================
+   MODAL ACTIONS
+   ========================= */
+
+.modalActions {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.printBtn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.printBtn:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.modalCloseButton {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #f3f4f6;
+    color: #374151;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.modalCloseButton:hover {
+    background: #e5e7eb;
+}
+
+/* =========================
+   RESPONSIVE - Table actions
+   ========================= */
+
+@media (max-width: 768px) {
+    .tdAction {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .actionBtn {
+        width: 28px;
+        height: 28px;
+        padding: 4px;
+    }
+
+    .actionBtn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .modalActions {
+        flex-direction: column;
+    }
+
+    .printBtn,
+    .modalCloseButton {
+        width: 100%;
+    }
+}

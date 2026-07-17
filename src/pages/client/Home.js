@@ -147,18 +147,15 @@ const Home = () => {
     const fetchTables = async () => {
         setLoadingTables(true);
         try {
-            // Đổi từ /tables/status/FREE thành /tables để lấy TẤT CẢ bàn
-            const response = await axiosClient.get('/tables');
+            // ✅ Gọi API public /tables/status/FREE thay vì /tables
+            const response = await axiosClient.get('/tables/status/FREE');
             console.log('Tables from API:', response.data);
 
-            // Xử lý response - có thể là array hoặc object có data
             let tablesData = [];
-            if (Array.isArray(response.data)) {
+            if (response.data?.success && Array.isArray(response.data.data)) {
+                tablesData = response.data.data;
+            } else if (Array.isArray(response.data)) {
                 tablesData = response.data;
-            } else if (response.data?.success && Array.isArray(response.data.data)) {
-                tablesData = response.data.data;
-            } else if (response.data?.data && Array.isArray(response.data.data)) {
-                tablesData = response.data.data;
             }
 
             const formattedTables = tablesData.map(table => ({
@@ -179,7 +176,6 @@ const Home = () => {
             setLoadingTables(false);
         }
     };
-
     const fetchPromotions = async () => {
         setLoadingPromotions(true);
         try {
@@ -215,9 +211,6 @@ const Home = () => {
     const getStatusText = (status) => {
         switch (status?.toUpperCase()) {
             case 'FREE': return 'Trống';
-            case 'OCCUPIED': return 'Đang sử dụng';
-            case 'RESERVED': return 'Đã đặt';
-            case 'MAINTENANCE': return 'Bảo trì';
             default: return 'Trống';
         }
     };
@@ -456,7 +449,7 @@ const Home = () => {
                             <h3>Lịch sử</h3>
                             <p>Đặt bàn & giao dịch</p>
                         </Link>
-                        <Link to="/khuyen-mai" className="quick-card highlight">
+                        <Link to="/uu-dai" className="quick-card highlight">
                             <div className="quick-icon"><Percent size={32} /></div>
                             <h3>Khuyến mãi</h3>
                             <p>Ưu đãi đặc biệt</p>
@@ -477,7 +470,7 @@ const Home = () => {
                                 <Percent size={24} />
                                 Khuyến mãi đặc biệt
                             </h2>
-                            <Link to="/khuyen-mai" className="view-all">
+                            <Link to="/uu-dai" className="view-all">
                                 Xem tất cả <ChevronRight size={16} />
                             </Link>
                         </div>
@@ -527,12 +520,9 @@ const Home = () => {
             <section id="table-map" className="table-map-section">
                 <div className="container">
                     <div className="section-header">
-                        <p className="section-subtitle">Xem trạng thái bàn theo thời gian thực</p>
+                        <p className="section-subtitle">Xem bàn </p>
                         <div className="status-legend">
                             <span><span className="legend-color available"></span> Trống</span>
-                            <span><span className="legend-color occupied"></span> Đang sử dụng</span>
-                            <span><span className="legend-color booked"></span> Đã đặt</span>
-                            <span><span className="legend-color maintenance"></span> Bảo trì</span>
                         </div>
                     </div>
 

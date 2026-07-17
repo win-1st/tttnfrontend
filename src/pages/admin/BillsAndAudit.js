@@ -59,6 +59,13 @@ export default function BillsAndAuditSystem() {
                 billsData = getMockBills();
             }
 
+            // ✅ SẮP XẾP: Mới nhất trước (giảm dần theo createdAt)
+            billsData = billsData.sort((a, b) => {
+                const dateA = new Date(a.createdAt || a.issuedAt || 0);
+                const dateB = new Date(b.createdAt || b.issuedAt || 0);
+                return dateB - dateA; // Giảm dần: mới nhất trước
+            });
+
             setBills(billsData);
             setCurrentPage(1);
         } catch (error) {

@@ -1119,3 +1119,101 @@
     color: #10b981;
     margin-top: 8px;
 }
+
+/* Rotated for chevron */
+.rotated {
+    transform: rotate(180deg);
+    transition: transform 0.2s ease;
+}
+
+/* Selected hint */
+.selectedHint {
+    font-size: 13px;
+    color: #10b981;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+/* ========== THÊM VÀO BookingPage.module.css ========== */
+
+.tableActions {
+    margin-top: 12px;
+}
+
+.tableStatusMessage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    width: 100%;
+}
+
+.tableNameSub {
+    font-size: 14px;
+    font-weight: 400;
+    color: #6b7280;
+    margin-left: 4px;
+}
+
+.tableCardHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.tableNumber {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.editTableBtn {
+    background: #f3f4f6;
+    border: none;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    color: #6b7280;
+}
+
+.editTableBtn:hover {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.tableCard.occupied {
+    opacity: 0.85;
+    cursor: default;
+}
+
+.tableCard.occupied:hover {
+    transform: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* Badge trạng thái bàn - Tùy chỉnh thêm */
+.tableStatusBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Đảm bảo bàn RESERVED hiển thị đúng */
+.tableCard .tableStatusWrapper {
+    margin-top: 8px;
+}

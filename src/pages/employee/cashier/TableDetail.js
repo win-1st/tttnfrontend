@@ -40,7 +40,10 @@ import {
     UserCheck,
     Coffee,
     Grid,
-    RefreshCw
+    RefreshCw,
+    MoreVertical,
+    Move,
+
 } from "lucide-react";
 import axiosClient from "../../../services/axiosClient";
 
@@ -51,6 +54,28 @@ import webSocketService from '../../../services/websocketService';
 import styles from "./TableDetail.module.css";
 
 const API_BASE_URL = "http://localhost:8080";
+
+// Hàm gửi thông báo qua localStorage và CustomEvent
+const sendNotification = (message, type = 'info') => {
+    const notification = {
+        id: Date.now(),
+        message: message,
+        type: type,
+        time: new Date().toLocaleTimeString('vi-VN'),
+        read: false,
+        timestamp: new Date().toISOString()
+    };
+
+    // Lưu vào localStorage
+    const existing = JSON.parse(localStorage.getItem('notifications') || '[]');
+    const updated = [notification, ...existing].slice(0, 50); // Giữ tối đa 50 thông báo
+    localStorage.setItem('notifications', JSON.stringify(updated));
+
+    // Gửi event để CashierLayout cập nhật
+    window.dispatchEvent(new CustomEvent('newNotification', {
+        detail: notification
+    }));
+};
 
 const TableDetail = () => {
     const { state } = useLocation();
@@ -86,10 +111,141 @@ const TableDetail = () => {
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
     const userRole = userData.role?.name || userData.role;
     const canAdjustTime = userRole === 'ADMIN' || userRole === 'MANAGER' || userRole === 'STAFF';
-    const [showCartMenu, setShowCartMenu] = useState(false);
     const [customerInfo, setCustomerInfo] = useState(null);
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
     const [promotionProductsMap, setPromotionProductsMap] = useState({});
+    const [showCartMenu, setShowCartMenu] = useState(false);
+    const [showMoveToTableModal, setShowMoveToTableModal] = useState(false);
+    const [availableTables, setAvailableTables] = useState([]);
+    const [selectedTargetTable, setSelectedTargetTable] = useState(null);
+    const [isMovingCart, setIsMovingCart] = useState(false);
+    const [showCancelOrderModal, setShowCancelOrderModal] = useState(false);
+    const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+
+
+    const handleCancelOrder = async () => {
+        if (!order?.id) {
+            showToast("Không tìm thấy đơn hàng để hủy", "warning");
+            return;
+        }
+
+        setIsCancellingOrder(true);
+        try {
+            // Gọi API hủy đơn hàng
+            await axiosClient.patch(`/orders/${order.id}/cancel`);
+
+            // ✅ Gửi thông báo hủy đơn thành công
+            const tableNumber = entity?.number || 'N/A';
+            sendNotification(
+                `❌ Đã hủy đơn hàng bàn ${tableNumber}`,
+                'warning'
+            );
+
+            // Reset state
+            setOrder(null);
+            setCart([]);
+            setShowCancelOrderModal(false);
+
+            showToast("Đã hủy đơn hàng thành công!", "success");
+
+            // ✅ Quay lại trang danh sách bàn sau khi hủy
+            setTimeout(() => {
+                navigate('/cashier/tables');
+            }, 1500);
+
+        } catch (err) {
+            console.error("Lỗi hủy đơn:", err);
+            const errorMessage = err.response?.data?.message || "Không thể hủy đơn hàng";
+            showToast(errorMessage, "error");
+
+            sendNotification(
+                `❌ Lỗi hủy đơn bàn ${entity?.number}: ${errorMessage}`,
+                'error'
+            );
+        } finally {
+            setIsCancellingOrder(false);
+        }
+    };
+
+    // Thêm function fetchTables nếu chưa có
+    const fetchTables = useCallback(async () => {
+        try {
+            const response = await axiosClient.get('/tables');
+            const tablesData = response.data.data || response.data || [];
+            // Cập nhật state tables nếu cần
+        } catch (err) {
+            console.error("Lỗi tải bàn:", err);
+        }
+    }, []);
+
+    const fetchAvailableTables = useCallback(async () => {
+        try {
+            const response = await axiosClient.get('/tables');
+            const tablesData = response.data.data || response.data || [];
+            // Lọc các bàn trống và khác bàn hiện tại
+            const freeTables = tablesData.filter(
+                t => t.status === "FREE" && t.id !== entity?.id
+            );
+            setAvailableTables(freeTables);
+        } catch (err) {
+            console.error("Lỗi tải danh sách bàn:", err);
+            showToast("Không thể tải danh sách bàn", "error");
+        }
+    }, [entity?.id]);
+
+    const handleMoveCartToTable = async () => {
+        if (!selectedTargetTable) {
+            showToast("Vui lòng chọn bàn đích", "warning");
+            return;
+        }
+
+        if (!order) {
+            showToast("Không có đơn hàng để chuyển", "warning");
+            return;
+        }
+
+        setIsMovingCart(true);
+        try {
+            const response = await axiosClient.patch(`/orders/${order.id}/move-to-table`, null, {
+                params: {
+                    targetTableId: selectedTargetTable.id
+                }
+            });
+
+            console.log("✅ Chuyển bàn thành công:", response.data);
+
+            // ✅ Gửi thông báo chuyển bàn
+            sendNotification(
+                `🔄 Đã chuyển đơn từ bàn ${entity?.number} sang bàn ${selectedTargetTable.number}`,
+                'success'
+            );
+
+            setOrder(null);
+            setCart([]);
+            setSelectedTargetTable(null);
+            setShowMoveToTableModal(false);
+
+            await fetchActiveOrder();
+            showToast(`Đã chuyển đơn sang bàn ${selectedTargetTable.number}`, "success");
+
+            setTimeout(() => {
+                navigate(`/cashier/tables/${selectedTargetTable.id}`, {
+                    state: { table: selectedTargetTable }
+                });
+            }, 1000);
+
+        } catch (err) {
+            console.error("Lỗi chuyển bàn:", err);
+            showToast(err.response?.data?.message || "Không thể chuyển bàn", "error");
+
+            sendNotification(
+                `❌ Lỗi chuyển bàn: ${err.response?.data?.message || err.message}`,
+                'error'
+            );
+        } finally {
+            setIsMovingCart(false);
+        }
+    };
 
     const fetchPromotionsWithProducts = useCallback(async () => {
         try {
@@ -351,9 +507,13 @@ const TableDetail = () => {
     const fetchActiveOrder = useCallback(async () => {
         if (!entity?.id) return;
         if (!getToken() || !isTokenValid()) return;
+
         try {
+            console.log('📤 Fetching active order for table:', entity.id);
             const response = await axiosClient.get(`/orders/table/${entity.id}`);
             const orderData = response.data;
+
+            console.log('📥 Order data:', orderData);
             setOrder(orderData && orderData.id ? orderData : null);
 
             if (orderData && orderData.id && orderData.items) {
@@ -373,6 +533,7 @@ const TableDetail = () => {
                 setCart([]);
             }
         } catch (err) {
+            console.error('Lỗi fetch active order:', err);
             setOrder(null);
             setCart([]);
         }
@@ -535,8 +696,22 @@ const TableDetail = () => {
             : product.price || 0;
 
         const discountedPrice = calculateDiscountedPrice(product, originalPrice);
-
         const hasDiscount = discountedPrice < originalPrice;
+
+        // ✅ Lấy thông tin khuyến mãi
+        let discountInfo = null;
+        if (hasDiscount) {
+            const promotions = promotionProductsMap[product.id];
+            if (promotions && promotions.length > 0) {
+                const promo = promotions[0];
+                discountInfo = {
+                    type: promo.discountType, // 'percentage' hoặc 'amount'
+                    value: promo.discountValue,
+                    name: promo.promotionName
+                };
+            }
+        }
+
         if (hasDiscount) {
             const promotions = promotionProductsMap[product.id];
             const promoName = promotions?.[0]?.promotionName || 'Khuyến mãi';
@@ -549,7 +724,11 @@ const TableDetail = () => {
 
             if (existing) {
                 return prev.map(item =>
-                    item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                    item.id === product.id ? {
+                        ...item,
+                        quantity: item.quantity + 1,
+                        discountInfo: discountInfo || item.discountInfo // ✅ Giữ thông tin giảm giá
+                    } : item
                 );
             }
             return [...prev, {
@@ -558,6 +737,7 @@ const TableDetail = () => {
                 price: discountedPrice,
                 originalPrice: originalPrice,
                 discountApplied: hasDiscount,
+                discountInfo: discountInfo, // ✅ Lưu thông tin giảm giá
                 quantity: 1,
                 productTypeCode: product.productTypeCode,
                 isTimeBased: product.productTypeCode === "TIME_BASED",
@@ -606,11 +786,46 @@ const TableDetail = () => {
         try {
             setIsConfirming(true);
 
-            const createResponse = await axiosClient.post(`/orders/open-table/${entity.id}`, {});
-            const newOrder = createResponse.data;
+            let newOrder = order;
+
+            if (!order) {
+                console.log('📤 No existing order, opening table...');
+
+                const tableCheck = await axiosClient.get(`/tables/${entity.id}`);
+                console.log('Table status:', tableCheck.data?.status);
+
+                if (tableCheck.data?.status === 'OCCUPIED') {
+                    try {
+                        const orderCheck = await axiosClient.get(`/orders/table/${entity.id}`);
+                        if (orderCheck.data?.id) {
+                            showToast("❌ Bàn đã có order!", "error");
+                            await fetchActiveOrder();
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('No active order found, will create new one');
+                    }
+                }
+
+                const createResponse = await axiosClient.post(`/orders/open-table/${entity.id}`, {});
+                newOrder = createResponse.data;
+                console.log('✅ Order created:', newOrder);
+            } else {
+                console.log('📤 Using existing order:', order.id);
+            }
+
+            if (!order) {
+                await axiosClient.patch(`/tables/${entity.id}/status`, null, {
+                    params: { status: "OCCUPIED" }
+                });
+            }
 
             for (const item of cart) {
                 if (item.isTimeBased) {
+                    if (newOrder.timeBasedProduct) {
+                        console.log('⏱️ Time-based product already exists, skipping');
+                        continue;
+                    }
                     await axiosClient.post(`/orders/${newOrder.id}/items`, null, {
                         params: {
                             productId: item.id,
@@ -628,16 +843,47 @@ const TableDetail = () => {
                 }
             }
 
-            await axiosClient.patch(`/tables/${entity.id}/status`, null, {
-                params: { status: "OCCUPIED" }
-            });
-
             await fetchActiveOrder();
+
+            // ✅ Gửi thông báo tạo đơn thành công
+            const itemCount = cart.length;
+            const tableNumber = entity?.number || 'N/A';
+            sendNotification(
+                `📋 Đã tạo đơn mới bàn ${tableNumber} với ${itemCount} món`,
+                'success'
+            );
+
             showToast("Tạo đơn hàng thành công!", "success");
 
         } catch (err) {
             console.error("Lỗi tạo đơn:", err);
-            showToast(err.response?.data?.message || "Không thể tạo đơn hàng", "error");
+            console.error("Response data:", err.response?.data);
+            console.error("Status:", err.response?.status);
+
+            if (err.response?.status === 401) {
+                showToast("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setTimeout(() => navigate('/login'), 1500);
+            } else {
+                const message = err.response?.data?.message ||
+                    err.response?.data?.error ||
+                    "Không thể tạo đơn hàng!";
+                showToast(message, "error");
+
+                sendNotification(
+                    `❌ Lỗi tạo đơn bàn ${entity?.number}: ${message}`,
+                    'error'
+                );
+
+                try {
+                    const tableCheck = await axiosClient.get(`/tables/${entity.id}`);
+                    setEntity(tableCheck.data);
+                    await fetchActiveOrder();
+                } catch (e) {
+                    console.error('Error refreshing data:', e);
+                }
+            }
         } finally {
             setIsConfirming(false);
         }
@@ -664,6 +910,12 @@ const TableDetail = () => {
                 setCart(prev => prev.filter(item => !item.isTimeBased));
 
                 await fetchActiveOrder();
+
+                sendNotification(
+                    `⏱️ Đã thêm dịch vụ tính giờ cho bàn ${entity?.number}`,
+                    'info'
+                );
+
                 showToast("Đã thêm dịch vụ tính giờ vào đơn! Bắt đầu tính giờ.", "success");
                 return;
             } catch (err) {
@@ -753,10 +1005,21 @@ const TableDetail = () => {
             }
 
             await fetchActiveOrder();
+
+            sendNotification(
+                `🔄 Đã cập nhật thêm món cho bàn ${entity?.number}`,
+                'info'
+            );
+
             showToast("Đã cập nhật đơn hàng!", "success");
         } catch (err) {
             console.error("Lỗi cập nhật:", err);
             showToast(err.response?.data?.message || "Không thể cập nhật đơn hàng", "error");
+
+            sendNotification(
+                `❌ Lỗi cập nhật đơn bàn ${entity?.number}: ${err.response?.data?.message || err.message}`,
+                'error'
+            );
         } finally {
             setIsConfirming(false);
         }
@@ -768,9 +1031,21 @@ const TableDetail = () => {
         try {
             await axiosClient.patch(`/orders/${order.id}/finish`, {});
             await fetchActiveOrder();
+
+            const tableNumber = entity?.number || 'N/A';
+            sendNotification(
+                `⏱️ Bàn ${tableNumber} đã kết thúc chơi - Chờ thanh toán`,
+                'info'
+            );
+
             showToast("Đã kết thúc chơi, chờ thanh toán", "success");
         } catch (err) {
             showToast(err.response?.data?.message || "Không thể kết thúc", "error");
+
+            sendNotification(
+                `❌ Lỗi kết thúc bàn ${entity?.number}: ${err.response?.data?.message || err.message}`,
+                'error'
+            );
         } finally {
             setIsFinishing(false);
         }
@@ -784,11 +1059,21 @@ const TableDetail = () => {
                 params: { additionalMinutes: adjustMinutes }
             });
             await fetchActiveOrder();
+
+            sendNotification(
+                `⏱️ Đã điều chỉnh ${Math.abs(adjustMinutes)} phút cho bàn ${entity?.number}`,
+                'info'
+            );
+
             showToast(`Đã điều chỉnh ${Math.abs(adjustMinutes)} phút`, "success");
             setShowTimeAdjustModal(false);
             setAdjustMinutes(0);
         } catch (err) {
             showToast(err.response?.data?.message || "Lỗi điều chỉnh", "error");
+            sendNotification(
+                `❌ Lỗi điều chỉnh thời gian bàn ${entity?.number}: ${err.response?.data?.message || err.message}`,
+                'error'
+            );
         } finally {
             setIsAdjustingTime(false);
         }
@@ -812,6 +1097,12 @@ const TableDetail = () => {
 
             if (customerPhone) {
                 paymentParams.customerPhone = customerPhone;
+                console.log("📱 Sending customerPhone:", customerPhone);
+            }
+
+            if (customerInfo) {
+                paymentParams.customerId = customerInfo.id;
+                console.log("👤 Sending customerId:", customerInfo.id);
             }
 
             const response = await axiosClient.post(`/bills/create`, null, {
@@ -820,6 +1111,38 @@ const TableDetail = () => {
 
             console.log("Payment response:", response.data);
 
+            const billData = response.data?.data || response.data || {};
+            const totalAmount = billData.totalAmount || finalTotal;
+            const tableNumber = entity?.number || 'N/A';
+
+            // ✅ Gửi thông báo thanh toán thành công
+            sendNotification(
+                `💰 Đã thanh toán đơn bàn ${tableNumber} - Tổng: ${totalAmount.toLocaleString("vi-VN")}đ`,
+                'success'
+            );
+
+            // ✅ CHỈ GỬI THÔNG BÁO TÍCH ĐIỂM, KHÔNG GỬI THÔNG BÁO KHÁCH HÀNG
+            if (customerInfo) {
+                const pointsEarned = Math.floor(totalAmount / 10000);
+                if (pointsEarned > 0) {
+                    const customerName = customerInfo.fullName || customerInfo.name || customerPhone;
+                    sendNotification(
+                        `⭐ Khách hàng ${customerName} được cộng ${pointsEarned} điểm`,
+                        'info'
+                    );
+                    showToast(`🎉 Khách hàng được cộng ${pointsEarned} điểm!`, "success", 3000);
+                }
+            } else if (customerPhone) {
+                const pointsEarned = Math.floor(totalAmount / 10000);
+                if (pointsEarned > 0) {
+                    sendNotification(
+                        `⭐ Khách hàng ${customerPhone} được cộng ${pointsEarned} điểm`,
+                        'info'
+                    );
+                    showToast(`🎉 Khách hàng được cộng ${pointsEarned} điểm!`, "success", 3000);
+                }
+            }
+
             setOrder(null);
             setCart([]);
             setSelectedPromotion(null);
@@ -827,9 +1150,15 @@ const TableDetail = () => {
             setCustomerInfo(null);
             showToast("Thanh toán thành công!", "success");
             setTimeout(() => navigate("/cashier/tables"), 1500);
+
         } catch (err) {
             console.error("Lỗi thanh toán:", err);
             showToast(err.response?.data?.message || "Lỗi thanh toán", "error");
+
+            sendNotification(
+                `❌ Lỗi thanh toán bàn ${entity?.number}: ${err.response?.data?.message || err.message}`,
+                'error'
+            );
         } finally {
             setIsPaying(false);
         }
@@ -925,143 +1254,226 @@ const TableDetail = () => {
 
     return (
         <div className={styles.container}>
-            {/* Header */}
+            {/* Header - Compact */}
             <div className={styles.header}>
-                <button className={styles.backBtn} onClick={() => navigate(-1)}>
-                    <ArrowLeft size={24} />
+                <button
+                    className={styles.backBtn}
+                    onClick={() => navigate('/cashier/tables')}
+                >
+                    <ArrowLeft size={20} />
                 </button>
                 <div className={styles.tableInfo}>
                     <h1 className={styles.tableTitle}>{entityType} {entityNumber}</h1>
                     <div className={`${styles.statusBadge} ${entity?.status === "FREE" ? styles.statusFree : styles.statusOccupied}`}>
                         {entity?.status === "FREE" ? (
-                            <><CheckCircle size={14} /> Trống</>
+                            <><CheckCircle size={12} /> Trống</>
                         ) : (
-                            <><XCircle size={14} /> Đã có khách</>
+                            <><XCircle size={12} /> Đang chơi</>
                         )}
                     </div>
                 </div>
                 <div className={styles.stats}>
                     <div className={styles.statItem}>
-                        <ShoppingCart size={18} />
-                        <span>{displayTotalItems} món</span>
+                        <ShoppingCart size={14} />
+                        <span>{displayTotalItems}</span>
                     </div>
                     <div className={styles.statItem}>
-                        <Users size={18} />
-                        <span>{entity?.capacity || 4} người</span>
+                        <Users size={14} />
+                        <span>{entity?.capacity || 4}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Hiển thị thời gian chơi realtime */}
-            {order && (order.status === "OPEN" || order.status === "WAITING_PAYMENT") && order.startTime && (
-                <div className={styles.timeBanner}>
-                    <div className={styles.timeBannerLeft}>
-                        <Clock size={16} className={styles.timeBannerIcon} />
-                        <span className={styles.timeBannerLabel}>Thời gian đã chơi:</span>
-                        <span className={styles.timeBannerValue}>
-                            {getDetailedPlayTime(order.startTime, null).text}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {/* Search & Categories */}
-            {(order?.status !== "PAID") && (
-                <>
-                    <div className={styles.searchSection}>
-                        <Search size={18} className={styles.searchIcon} />
-                        <input
-                            type="text"
-                            className={styles.searchInput}
-                            placeholder="Tìm kiếm món..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className={styles.categoryTabs}>
-                        {categories.map((cat) => (
-                            <button
-                                key={cat}
-                                className={`${styles.categoryBtn} ${activeTab === cat ? styles.categoryBtnActive : ""}`}
-                                onClick={() => setActiveTab(cat)}
-                            >
-                                {cat === "Tất cả" && <Grid size={14} />}
-                                {cat !== "Tất cả" && <Coffee size={14} />}
-                                {cat}
-                            </button>
-                        ))}
-                    </div>
-                </>
-            )}
-
-            {/* Content */}
-            <div className={styles.content}>
-                {/* Products Grid */}
-                {(order?.status !== "PAID") && (
-                    <div className={styles.productsGrid}>
-                        {loading ? (
-                            <div className={styles.loadingState}>
-                                <RefreshCw className={styles.spinIcon} size={24} />
-                                <span>Đang tải sản phẩm...</span>
+            {/* Main Wrapper - chứa leftColumn + cartSidebar */}
+            <div className={styles.mainWrapper}>
+                <div className={styles.leftColumn}>
+                    {/* Toolbar - Time + Search gộp chung 1 hàng */}
+                    <div className={styles.toolbar}>
+                        {order && (order.status === "OPEN" || order.status === "WAITING_PAYMENT") && order.startTime && (
+                            <div className={styles.playingTime}>
+                                <Clock size={14} />
+                                <span>{getDetailedPlayTime(order.startTime, null).text}</span>
                             </div>
-                        ) : filteredProducts.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <Package size={48} className={styles.emptyIcon} />
-                                <span>Không có sản phẩm</span>
+                        )}
+                        {(order?.status !== "PAID") && (
+                            <div className={styles.searchWrapper}>
+                                <Search size={14} className={styles.searchIconSmall} />
+                                <input
+                                    type="text"
+                                    className={styles.searchInputSmall}
+                                    placeholder="Tìm món..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
-                        ) : (
-                            filteredProducts
-                                .filter(product => {
-                                    if (order?.timeBasedProduct && product.productTypeCode === "TIME_BASED") {
-                                        return false;
-                                    }
-                                    return true;
-                                })
-                                .map((product) => {
-                                    const discountInfo = getDiscountedPriceForProduct(product);
-                                    const displayPrice = discountInfo ? discountInfo.discountedPrice :
-                                        (product.productTypeCode === "TIME_BASED" ? product.pricePerMinute : product.price);
-
-                                    return (
-                                        <div
-                                            key={product.id}
-                                            className={styles.productCard}
-                                            onClick={() => addToCart(product)}
-                                        >
-                                            {product.productTypeCode === "TIME_BASED" && (
-                                                <div className={styles.timeBasedBadge}>
-                                                    <Clock size={12} /> Tính giờ
-                                                </div>
-                                            )}
-                                            <img
-                                                src={product.imageUrl?.startsWith("http") ? product.imageUrl : `${API_BASE_URL}${product.imageUrl || ""}`}
-                                                alt={product.name}
-                                                className={styles.productImage}
-                                                onError={(e) => { e.target.src = "https://via.placeholder.com/80?text=No+Image"; }}
-                                            />
-                                            <div className={styles.productInfo}>
-                                                <h4 className={styles.productName}>{product.name}</h4>
-                                                <p className={styles.productPrice}>
-                                                    <DollarSign size={12} />
-                                                    {displayPrice?.toLocaleString("vi-VN")}đ
-                                                    {product.productTypeCode === "TIME_BASED" && (
-                                                        <span className={styles.perMinute}>/phút</span>
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    );
-                                })
                         )}
                     </div>
-                )}
 
-                {/* Cart Sidebar */}
+                    {/* Category Tabs - Compact với tên ngắn */}
+                    {(order?.status !== "PAID") && (
+                        <div className={styles.categoryTabsCompact}>
+                            {categories.map((cat) => {
+                                let displayName = cat;
+                                let icon = <Grid size={12} />;
+
+                                if (cat === "Tất cả") {
+                                    displayName = "Tất cả";
+                                    icon = <Grid size={12} />;
+                                } else if (cat === "Tiền giờ") {
+                                    displayName = "Giờ";
+                                    icon = <Clock size={12} />;
+                                } else if (cat === "Đồ ăn") {
+                                    displayName = "Ăn";
+                                    icon = <Coffee size={12} />;
+                                } else if (cat === "Đồ uống") {
+                                    displayName = "Nước";
+                                    icon = <Coffee size={12} />;
+                                } else {
+                                    icon = <Coffee size={12} />;
+                                }
+
+                                return (
+                                    <button
+                                        key={cat}
+                                        className={`${styles.categoryBtnCompact} ${activeTab === cat ? styles.categoryBtnActiveCompact : ""}`}
+                                        onClick={() => setActiveTab(cat)}
+                                    >
+                                        {icon}
+                                        {displayName}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Content - Products Grid */}
+                    <div className={styles.content}>
+                        {(order?.status !== "PAID") && (
+                            <div className={styles.productsGrid}>
+                                {loading ? (
+                                    <div className={styles.loadingState}>
+                                        <RefreshCw className={styles.spinIcon} size={24} />
+                                        <span>Đang tải sản phẩm...</span>
+                                    </div>
+                                ) : filteredProducts.length === 0 ? (
+                                    <div className={styles.emptyState}>
+                                        <Package size={48} className={styles.emptyIcon} />
+                                        <span>Không có sản phẩm</span>
+                                    </div>
+                                ) : (
+                                    filteredProducts
+                                        .filter(product => {
+                                            if (order?.timeBasedProduct && product.productTypeCode === "TIME_BASED") {
+                                                return false;
+                                            }
+                                            return true;
+                                        })
+                                        .map((product) => {
+                                            const discountInfo = getDiscountedPriceForProduct(product);
+                                            const displayPrice = discountInfo ? discountInfo.discountedPrice :
+                                                (product.productTypeCode === "TIME_BASED" ? product.pricePerMinute : product.price);
+
+                                            return (
+                                                <div
+                                                    key={product.id}
+                                                    className={styles.productCard}
+                                                    onClick={() => addToCart(product)}
+                                                >
+                                                    {product.productTypeCode === "TIME_BASED" && (
+                                                        <div className={styles.timeBasedBadge}>
+                                                            <Clock size={12} /> Tính giờ
+                                                        </div>
+                                                    )}
+                                                    <img
+                                                        src={product.imageUrl?.startsWith("http") ? product.imageUrl : `${API_BASE_URL}${product.imageUrl || ""}`}
+                                                        alt={product.name}
+                                                        className={styles.productImage}
+                                                        onError={(e) => { e.target.src = "https://via.placeholder.com/80?text=No+Image"; }}
+                                                    />
+                                                    <div className={styles.productInfo}>
+                                                        <h4 className={styles.productName}>{product.name}</h4>
+                                                        <p className={styles.productPrice}>
+                                                            <DollarSign size={12} />
+                                                            {displayPrice?.toLocaleString("vi-VN")}đ
+                                                            {product.productTypeCode === "TIME_BASED" && (
+                                                                <span className={styles.perMinute}>/phút</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Cart Sidebar - Full height */}
                 <div className={styles.cartSidebar}>
-                    <h3 className={styles.cartTitle}>
-                        <ShoppingBag size={20} />
-                        Đơn hàng
-                    </h3>
+                    {/* Cart Header với nút 3 chấm */}
+                    <div className={styles.cartHeader}>
+                        <h3 className={styles.cartTitle}>
+                            <ShoppingBag size={20} />
+                            Đơn hàng
+                        </h3>
+
+                        {order && (order.status === "OPEN" || order.status === "WAITING_PAYMENT") && (
+                            <div className={styles.cartMenuWrapper}>
+                                <button
+                                    className={styles.cartMenuBtn}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowCartMenu(!showCartMenu);
+                                    }}
+                                >
+                                    <MoreVertical size={20} />
+                                </button>
+
+                                {showCartMenu && (
+                                    <div className={styles.cartDropdown}>
+                                        {order && order.status === "OPEN" && order.startTime && (
+                                            <button
+                                                className={styles.cartMenuItem}
+                                                onClick={() => {
+                                                    setShowCartMenu(false);
+                                                    setShowTimeAdjustModal(true);
+                                                }}
+                                            >
+                                                <Clock size={16} />
+                                                Điều chỉnh thời gian chơi
+                                            </button>
+                                        )}
+
+                                        <button
+                                            className={styles.cartMenuItem}
+                                            onClick={() => {
+                                                setShowCartMenu(false);
+                                                setShowMoveToTableModal(true);
+                                                fetchAvailableTables();
+                                            }}
+                                        >
+                                            <Move size={16} />
+                                            Chuyển sang bàn khác
+                                        </button>
+
+                                        {(order?.status === "OPEN" || order?.status === "WAITING_PAYMENT") && (
+                                            <button
+                                                className={`${styles.cartMenuItem} ${styles.cartMenuItemDanger}`}
+                                                onClick={() => {
+                                                    setShowCartMenu(false);
+                                                    setShowCancelOrderModal(true);
+                                                }}
+                                            >
+                                                <XCircle size={16} />
+                                                Hủy đơn hàng
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Customer Info & Promotion */}
                     <div className={styles.customerInfoSection}>
@@ -1203,7 +1615,13 @@ const TableDetail = () => {
                                                 {item.name}
                                                 {item.discountApplied && (
                                                     <span className={styles.discountBadge}>
-                                                        -{Math.round((item.originalPrice - item.price) / item.originalPrice * 100)}%
+                                                        {item.discountInfo?.type === 'percentage' ? (
+                                                            `-${Math.round((item.originalPrice - item.price) / item.originalPrice * 100)}%`
+                                                        ) : item.discountInfo?.type === 'amount' ? (
+                                                            `-${(item.originalPrice - item.price).toLocaleString("vi-VN")}đ`
+                                                        ) : (
+                                                            `-${Math.round((item.originalPrice - item.price) / item.originalPrice * 100)}%`
+                                                        )}
                                                     </span>
                                                 )}
                                             </span>
@@ -1229,7 +1647,8 @@ const TableDetail = () => {
                                                 )}
                                             </span>
                                         </div>
-                                        {(order?.status === "OPEN" && !item.isTimeBased) && (
+
+                                        {(order?.status === "OPEN" || isNewOrder) && !item.isTimeBased && (
                                             <div className={styles.cartItemControls}>
                                                 <button onClick={() => updateQuantity(item.id, -1)} className={styles.qtyBtn}>
                                                     <Minus size={14} />
@@ -1243,6 +1662,13 @@ const TableDetail = () => {
                                                 </button>
                                             </div>
                                         )}
+
+                                        {order?.status === "WAITING_PAYMENT" && !item.isTimeBased && (
+                                            <div className={styles.cartItemControls}>
+                                                <span className={styles.qtyValue}>x{item.quantity}</span>
+                                            </div>
+                                        )}
+
                                         {item.isTimeBased && (
                                             <div className={styles.timeBasedItemDetail}>
                                                 {order?.status === "WAITING_PAYMENT"
@@ -1256,16 +1682,6 @@ const TableDetail = () => {
                             </div>
 
                             <div className={styles.cartFooter}>
-                                {/* Nút điều chỉnh thời gian trong giỏ hàng */}
-                                {order && order.status === "OPEN" && order.startTime && (
-                                    <button
-                                        onClick={() => setShowTimeAdjustModal(true)}
-                                        className={styles.adjustTimeBtn}
-                                    >
-                                        <Clock size={16} /> Điều chỉnh thời gian chơi
-                                    </button>
-                                )}
-
                                 <div className={styles.totalRow}>
                                     <span>Tổng cộng:</span>
                                     <span className={styles.totalAmount}>
@@ -1284,7 +1700,6 @@ const TableDetail = () => {
                                     </div>
                                 )}
 
-                                {/* Các nút chức năng */}
                                 <div className={styles.actionButtons}>
                                     {isNewOrder && cart.length > 0 && (
                                         <button
@@ -1300,7 +1715,7 @@ const TableDetail = () => {
                                         </button>
                                     )}
 
-                                    {canEdit && cart.filter(item => !item.isTimeBased).length > 0 && (
+                                    {canEdit && cart.length > 0 && (
                                         <button
                                             className={styles.updateOrderBtn}
                                             onClick={handleUpdateOrder}
@@ -1367,6 +1782,7 @@ const TableDetail = () => {
                 totalAmount={finalTotal}
                 entityNumber={entityNumber}
                 entityType={entityType}
+                customerPhone={customerPhone}
             />
 
             {/* Cash Payment Modal */}
@@ -1416,12 +1832,8 @@ const TableDetail = () => {
                                         }
                                     }}
                                 >
-                                    <option value="minutes">
-                                        <Clock size={14} /> Điều chỉnh theo số phút
-                                    </option>
-                                    <option value="datetime">
-                                        <Calendar size={14} /> Chọn lại thời gian bắt đầu
-                                    </option>
+                                    <option value="minutes">⏱️ Điều chỉnh theo số phút</option>
+                                    <option value="datetime">📅 Chọn lại thời gian bắt đầu</option>
                                 </select>
                             </div>
 
@@ -1618,6 +2030,175 @@ const TableDetail = () => {
                                 className={styles.closePromoBtn}
                             >
                                 Đóng
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showMoveToTableModal && (
+                <div className={styles.modalOverlay} onClick={() => setShowMoveToTableModal(false)}>
+                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h3 className={styles.modalTitle}>
+                                <Move size={20} /> Chuyển đơn sang bàn khác
+                            </h3>
+                            <button
+                                onClick={() => setShowMoveToTableModal(false)}
+                                className={styles.modalCloseBtn}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className={styles.modalBody}>
+                            <div className={styles.currentTableInfo}>
+                                <p><strong>Bàn hiện tại:</strong> {entity?.number}</p>
+                                <p><strong>Số món:</strong> {cart.length}</p>
+                                <p><strong>Tổng tiền:</strong> {cartTotal.toLocaleString("vi-VN")}đ</p>
+                            </div>
+
+                            <div className={styles.tableSelection}>
+                                <label className={styles.selectionLabel}>Chọn bàn đích:</label>
+
+                                {availableTables.length === 0 ? (
+                                    <div className={styles.noTableAvailable}>
+                                        <AlertCircle size={24} />
+                                        <span>Không có bàn trống nào</span>
+                                    </div>
+                                ) : (
+                                    <div className={styles.tableGrid}>
+                                        {availableTables.map(table => (
+                                            <div
+                                                key={table.id}
+                                                className={`${styles.tableOption} ${selectedTargetTable?.id === table.id ? styles.tableOptionSelected : ''
+                                                    }`}
+                                                onClick={() => setSelectedTargetTable(table)}
+                                            >
+                                                <div className={styles.tableOptionNumber}>
+                                                    Bàn {table.number}
+                                                </div>
+                                                <div className={styles.tableOptionStatus}>
+                                                    <CheckCircle size={14} color="#10b981" />
+                                                    Trống
+                                                </div>
+                                                <div className={styles.tableOptionCapacity}>
+                                                    <Users size={12} /> {table.capacity || 4} người
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {selectedTargetTable && (
+                                <div className={styles.selectedTableConfirm}>
+                                    <Check size={16} color="#10b981" />
+                                    <span>Đã chọn: <strong>Bàn {selectedTargetTable.number}</strong></span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={styles.modalFooter}>
+                            <button
+                                onClick={() => {
+                                    setShowMoveToTableModal(false);
+                                    setSelectedTargetTable(null);
+                                }}
+                                className={styles.cancelBtn}
+                            >
+                                <X size={16} /> Hủy
+                            </button>
+                            <button
+                                onClick={handleMoveCartToTable}
+                                disabled={!selectedTargetTable || isMovingCart}
+                                className={styles.submitAdjustBtn}
+                            >
+                                {isMovingCart ? (
+                                    <><RefreshCw className={styles.spinIcon} size={16} /> Đang chuyển...</>
+                                ) : (
+                                    <><Move size={16} /> Chuyển đơn</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal xác nhận hủy đơn hàng */}
+            {showCancelOrderModal && (
+                <div className={styles.modalOverlay} onClick={() => setShowCancelOrderModal(false)}>
+                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h3 className={styles.modalTitle}>
+                                <AlertCircle size={20} color="#ef4444" />
+                                Xác nhận hủy đơn hàng
+                            </h3>
+                            <button
+                                onClick={() => setShowCancelOrderModal(false)}
+                                className={styles.modalCloseBtn}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className={styles.modalBody}>
+                            <div className={styles.cancelOrderInfo}>
+                                <p style={{ color: '#ef4444', fontWeight: 600, fontSize: 16 }}>
+                                    Bạn có chắc chắn muốn hủy đơn hàng này?
+                                </p>
+                                <div className={styles.cancelOrderDetails}>
+                                    <div className={styles.cancelOrderRow}>
+                                        <span>Bàn:</span>
+                                        <strong>{entity?.number}</strong>
+                                    </div>
+                                    <div className={styles.cancelOrderRow}>
+                                        <span>Số món:</span>
+                                        <strong>{cart.length}</strong>
+                                    </div>
+                                    <div className={styles.cancelOrderRow}>
+                                        <span>Tổng tiền:</span>
+                                        <strong style={{ color: '#dc2626' }}>
+                                            {finalTotal.toLocaleString("vi-VN")}đ
+                                        </strong>
+                                    </div>
+                                    {order?.status === "OPEN" && (
+                                        <div className={styles.cancelOrderRow}>
+                                            <span>Trạng thái:</span>
+                                            <span style={{ color: '#f59e0b' }}>Đang chơi</span>
+                                        </div>
+                                    )}
+                                    {order?.status === "WAITING_PAYMENT" && (
+                                        <div className={styles.cancelOrderRow}>
+                                            <span>Trạng thái:</span>
+                                            <span style={{ color: '#3b82f6' }}>Chờ thanh toán</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className={styles.cancelOrderWarning}>
+                                    <AlertCircle size={16} color="#ef4444" />
+                                    <span>Hành động này không thể hoàn tác!</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className={styles.modalFooter}>
+                            <button
+                                onClick={() => setShowCancelOrderModal(false)}
+                                className={styles.cancelBtn}
+                            >
+                                Quay lại
+                            </button>
+                            <button
+                                onClick={handleCancelOrder}
+                                disabled={isCancellingOrder}
+                                className={styles.dangerBtn}
+                            >
+                                {isCancellingOrder ? (
+                                    <><RefreshCw className={styles.spinIcon} size={16} /> Đang xử lý...</>
+                                ) : (
+                                    <><XCircle size={16} /> Xác nhận hủy</>
+                                )}
                             </button>
                         </div>
                     </div>

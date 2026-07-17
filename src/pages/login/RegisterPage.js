@@ -12,6 +12,7 @@ const RegisterPage = () => {
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // ✅ Thêm state cho confirm password
     const [isLoading, setIsLoading] = useState(false);
     const [toasts, setToasts] = useState([]);
 
@@ -139,13 +140,22 @@ const RegisterPage = () => {
                         <div className="input-wrapper">
                             <Lock size={18} className="input-icon" />
                             <input
-                                type={showPassword ? "text" : "password"}
+                                type={showConfirmPassword ? "text" : "password"} // ✅ Sử dụng showConfirmPassword
                                 placeholder="Nhập lại mật khẩu"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
                                 disabled={isLoading}
                             />
+                            {/* ✅ Thêm nút toggle cho confirm password */}
+                            <button
+                                type="button"
+                                className="toggle-password"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                disabled={isLoading}
+                            >
+                                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                         </div>
                     </div>
 

@@ -9,10 +9,31 @@ import {
     Award, Gift, Tag, Percent, CreditCard, Smartphone,
     Landmark, Receipt, ShoppingBag, Package, Timer,
     TrendingUp, BarChart3, PieChart, LineChart, CheckCircle,
-    ChevronRight, ArrowLeft
+    ChevronRight, ArrowLeft, Info
 } from "lucide-react";
 import axiosClient from "../../../services/axiosClient";
 import styles from "./BookingPage.module.css";
+import webSocketService from '../../../services/websocketService';
+
+// ========== HÀM GỬI THÔNG BÁO ==========
+const sendNotification = (message, type = 'info') => {
+    const notification = {
+        id: Date.now(),
+        message: message,
+        type: type,
+        time: new Date().toLocaleTimeString('vi-VN'),
+        read: false,
+        timestamp: new Date().toISOString()
+    };
+
+    const existing = JSON.parse(localStorage.getItem('notifications') || '[]');
+    const updated = [notification, ...existing].slice(0, 50);
+    localStorage.setItem('notifications', JSON.stringify(updated));
+
+    window.dispatchEvent(new CustomEvent('newNotification', {
+        detail: notification
+    }));
+};
 
 const BookingPage = () => {
     // ========== STATE CHO ĐẶT BÀN ==========
@@ -67,19 +88,78 @@ const BookingPage = () => {
     const [redeemQuantity, setRedeemQuantity] = useState(1);
     const [redeeming, setRedeeming] = useState(false);
 
+    // ========== CHECK ROLE ==========
     useEffect(() => {
+        const userData = JSON.parse(localStorage.getItem('user') || '{}');
+
+        if (userData.role === 'ADMIN') {
+            window.location.href = '/admin/dashboard';
+            return;
+        }
+
+        if (userData.role !== 'STAFF') {
+            window.location.href = '/';
+            return;
+        }
+
+        setUser(userData);
+        setBookingData(prev => ({
+            ...prev,
+            customerName: userData.fullName || "",
+            customerPhone: userData.phone || "",
+            customerEmail: userData.email || ""
+        }));
+
         fetchTables();
         fetchAllReservations();
-        const userData = JSON.parse(localStorage.getItem('user') || '{}');
-        if (userData.id) {
-            setUser(userData);
-            setBookingData(prev => ({
-                ...prev,
-                customerName: userData.fullName || "",
-                customerPhone: userData.phone || "",
-                customerEmail: userData.email || ""
-            }));
-        }
+    }, []);
+
+    // ========== WEBSOCKET ==========
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const connectWS = async () => {
+            try {
+                await webSocketService.connect(token);
+
+                webSocketService.setTableStatusCallback((data) => {
+                    console.log('📡 Staff received table status:', data);
+                    fetchTables();
+                    fetchAllReservations();
+
+                    if (data.status === 'RESERVED') {
+                        showToast(`🆕 Có đặt bàn mới từ ${data.customerName || 'khách hàng'}!`, 'success');
+                        // ✅ Gửi thông báo đến bell
+                        sendNotification(
+                            `📅 Đặt bàn mới: ${data.customerName || 'Khách hàng'} - Bàn ${data.tableNumber || 'chưa xác định'}`,
+                            'success'
+                        );
+                    } else if (data.status === 'OCCUPIED') {
+                        showToast(`✅ Check-in thành công - Bàn ${data.tableNumber || data.tableId}`, 'success');
+                        sendNotification(
+                            `✅ Check-in thành công: Bàn ${data.tableNumber || data.tableId}`,
+                            'success'
+                        );
+                    } else if (data.status === 'FREE') {
+                        showToast(`❌ Đã hủy đặt bàn ${data.tableNumber || data.tableId}`, 'warning');
+                        sendNotification(
+                            `❌ Đã hủy đặt bàn ${data.tableNumber || data.tableId}`,
+                            'warning'
+                        );
+                    }
+                });
+
+            } catch (error) {
+                console.error('WebSocket connection error:', error);
+            }
+        };
+
+        connectWS();
+
+        return () => {
+            webSocketService.setTableStatusCallback(null);
+        };
     }, []);
 
     // Load danh sách khách hàng khi vào tab redeem
@@ -126,9 +206,14 @@ const BookingPage = () => {
     const fetchTables = async () => {
         try {
             const response = await axiosClient.get('/tables');
-            setTables(response.data.data || response.data || []);
+            console.log('All tables for staff:', response.data);
+
+            const data = response.data.data || response.data || [];
+            setTables(data);
         } catch (error) {
             console.error("Lỗi tải bàn:", error);
+            showToast('Không thể tải danh sách bàn', 'error');
+            setTables([]);
         }
     };
 
@@ -162,7 +247,11 @@ const BookingPage = () => {
 
     const handleSelectTableAndOpenForm = (table) => {
         setSelectedTable(table);
-        setBookingData(prev => ({ ...prev, tableId: table.id, numberOfGuests: table.capacity || prev.numberOfGuests }));
+        setBookingData(prev => ({
+            ...prev,
+            tableId: table.id,
+            numberOfGuests: table.capacity || prev.numberOfGuests
+        }));
         setShowForm(true);
         showToast(`Đã chọn bàn ${table.number}`, "success");
     };
@@ -174,12 +263,12 @@ const BookingPage = () => {
     };
 
     const handleSelectTableFromDropdown = (table) => {
-        if (table.status !== 'FREE') {
-            showToast(`Bàn ${table.number} đã có khách, không thể đặt`, "error");
-            return;
-        }
         setSelectedTable(table);
-        setBookingData(prev => ({ ...prev, tableId: table.id, numberOfGuests: table.capacity || prev.numberOfGuests }));
+        setBookingData(prev => ({
+            ...prev,
+            tableId: table.id,
+            numberOfGuests: table.capacity || prev.numberOfGuests
+        }));
         setShowTableDropdown(false);
         setSearchTable("");
         showToast(`Đã chọn bàn ${table.number}`, "success");
@@ -200,7 +289,10 @@ const BookingPage = () => {
 
         const tableId = bookingData.tableId || selectedTable?.id;
         const isAvailable = await checkAvailability(tableId, bookingData.reservationDate, bookingData.reservationTime);
-        if (!isAvailable) { showToast("Bàn đã được đặt vào khung giờ này", "error"); return; }
+        if (!isAvailable) {
+            showToast("Bàn đã được đặt vào khung giờ này", "error");
+            return;
+        }
 
         setLoading(true);
         try {
@@ -216,6 +308,22 @@ const BookingPage = () => {
             };
             const response = await axiosClient.post('/reservations/create', payload);
             if (response.data?.success) {
+                // ✅ Gửi thông báo đặt bàn thành công
+                const tableNumber = selectedTable?.number || 'chưa xác định';
+                const timeStr = `${bookingData.reservationDate} lúc ${bookingData.reservationTime}`;
+
+                sendNotification(
+                    `📅 Đặt bàn mới: ${bookingData.customerName} - Bàn ${tableNumber} - ${timeStr} (${bookingData.numberOfGuests} khách)`,
+                    'success'
+                );
+
+                if (bookingData.notes) {
+                    sendNotification(
+                        `📝 Ghi chú đặt bàn: ${bookingData.notes}`,
+                        'info'
+                    );
+                }
+
                 showToast("Đặt bàn thành công! Đang chờ xác nhận.", "success");
                 setShowForm(false);
                 setSelectedTable(null);
@@ -229,7 +337,13 @@ const BookingPage = () => {
                 fetchTables();
             }
         } catch (error) {
-            showToast(error.response?.data?.message || "Đặt bàn thất bại", "error");
+            const errorMsg = error.response?.data?.message || "Đặt bàn thất bại";
+            // ✅ Gửi thông báo lỗi đặt bàn
+            sendNotification(
+                `❌ Lỗi đặt bàn: ${errorMsg}`,
+                'error'
+            );
+            showToast(errorMsg, "error");
         } finally {
             setLoading(false);
         }
@@ -238,7 +352,7 @@ const BookingPage = () => {
     const openConfirmModal = (reservationId, actionType) => {
         const reservation = reservations.find(r => r.id === reservationId);
         if (!reservation) { showToast("Không tìm thấy đặt bàn", "error"); return; }
-        setConfirmData({ ...reservation, title: null, message: null, action: null });
+        setConfirmData({ ...reservation });
         setConfirmAction(actionType);
         setShowConfirmModal(true);
     };
@@ -249,11 +363,23 @@ const BookingPage = () => {
         setConfirming(confirmData.id);
         try {
             await axiosClient.patch(`/reservations/${confirmData.id}/confirm`);
+
+            // ✅ Gửi thông báo xác nhận đặt bàn
+            sendNotification(
+                `✅ Đã xác nhận đặt bàn: ${confirmData.customerName} - Bàn ${confirmData.tableNumber}`,
+                'success'
+            );
+
             showToast(`Đã xác nhận đặt bàn ${confirmData.tableNumber} cho ${confirmData.customerName}!`, "success");
             fetchAllReservations();
-            fetchTables();
         } catch (error) {
-            showToast(error.response?.data?.message || "Xác nhận thất bại", "error");
+            const errorMsg = error.response?.data?.message || "Xác nhận thất bại";
+            // ✅ Gửi thông báo lỗi xác nhận
+            sendNotification(
+                `❌ Lỗi xác nhận đặt bàn: ${errorMsg}`,
+                'error'
+            );
+            showToast(errorMsg, "error");
         } finally {
             setConfirming(null);
             setConfirmData(null);
@@ -263,7 +389,7 @@ const BookingPage = () => {
     const handleCancelReservationWithModal = (reservationId) => {
         const reservation = reservations.find(r => r.id === reservationId);
         if (!reservation) { showToast("Không tìm thấy đặt bàn", "error"); return; }
-        setConfirmData({ ...reservation, title: null, message: null, action: null });
+        setConfirmData({ ...reservation });
         setConfirmAction("cancel");
         setShowConfirmModal(true);
     };
@@ -273,11 +399,23 @@ const BookingPage = () => {
         setShowConfirmModal(false);
         try {
             await axiosClient.patch(`/reservations/${confirmData.id}/cancel?reason=Khách hủy`);
+
+            // ✅ Gửi thông báo hủy đặt bàn
+            sendNotification(
+                `❌ Đã hủy đặt bàn: ${confirmData.customerName} - Bàn ${confirmData.tableNumber}`,
+                'warning'
+            );
+
             showToast("Hủy đặt bàn thành công!", "success");
             fetchAllReservations();
             fetchTables();
         } catch (error) {
-            showToast("Hủy thất bại", "error");
+            const errorMsg = error.response?.data?.message || "Hủy thất bại";
+            sendNotification(
+                `❌ Lỗi hủy đặt bàn: ${errorMsg}`,
+                'error'
+            );
+            showToast(errorMsg, "error");
         } finally {
             setConfirmData(null);
         }
@@ -286,32 +424,109 @@ const BookingPage = () => {
     const handleCheckIn = async (reservationId) => {
         setCheckingIn(reservationId);
         try {
-            await axiosClient.patch(`/reservations/${reservationId}/checkin`);
-            showToast("Check-in thành công! Khách đã đến bàn.", "success");
-            fetchAllReservations();
-            fetchTables();
+            console.log('=== CHECK-IN START ===');
+            console.log('Reservation ID:', reservationId);
+
+            // ✅ Lấy reservation ở đây
+            const reservation = reservations.find(r => r.id === reservationId);
+            if (!reservation) {
+                showToast("Không tìm thấy đặt bàn!", "error");
+                return;
+            }
+
+            console.log('Reservation status:', reservation.status);
+            console.log('Table ID:', reservation.tableId);
+
+            if (reservation.status === 'CHECKED_IN') {
+                showToast("Đặt bàn đã được check-in trước đó!", "info");
+                fetchAllReservations();
+                fetchTables();
+                return;
+            }
+
+            if (reservation.status === 'PENDING') {
+                console.log('⚠️ Status is PENDING, auto-confirming...');
+                try {
+                    await axiosClient.patch(`/reservations/${reservationId}/confirm`);
+                    console.log('✅ Auto-confirmed successfully');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (confirmError) {
+                    console.error('Auto-confirm failed:', confirmError);
+                    showToast("Không thể tự động xác nhận đặt bàn!", "error");
+                    return;
+                }
+            }
+
+            console.log('📤 Sending check-in request...');
+            const response = await axiosClient.patch(`/reservations/${reservationId}/checkin`);
+            console.log('✅ Check-in response:', response.data);
+
+            if (response.data?.success) {
+                // ✅ Gửi thông báo check-in thành công
+                sendNotification(
+                    `✅ Check-in thành công: ${reservation.customerName} - Bàn ${reservation.tableNumber}`,
+                    'success'
+                );
+
+                showToast("Check-in thành công! Khách đã đến bàn.", "success");
+
+                const tableId = reservation.tableId || response.data?.data?.tableId;
+                if (tableId) {
+                    console.log('📤 Updating table status to OCCUPIED...');
+                    await axiosClient.patch(`/tables/${tableId}/status?status=OCCUPIED`);
+                    console.log('✅ Table status updated');
+                }
+
+                setTimeout(() => {
+                    fetchAllReservations();
+                    fetchTables();
+                }, 1000);
+            } else {
+                showToast(response.data?.message || "Check-in thất bại!", "error");
+            }
+
         } catch (error) {
-            showToast("Check-in thất bại", "error");
+            console.error('❌ Check-in error:', error);
+            console.error('Response data:', error.response?.data);
+            console.error('Status:', error.response?.status);
+
+            // ✅ Lấy lại reservation từ state nếu chưa có
+            const currentReservation = reservations.find(r => r.id === reservationId);
+            const errorMessage = error.response?.data?.message ||
+                error.response?.data?.data ||
+                "Check-in thất bại! Vui lòng thử lại.";
+
+            // ✅ Gửi thông báo lỗi check-in (có kiểm tra currentReservation)
+            if (currentReservation) {
+                sendNotification(
+                    `❌ Lỗi check-in bàn ${currentReservation.tableNumber || 'chưa xác định'}: ${errorMessage}`,
+                    'error'
+                );
+            } else {
+                sendNotification(
+                    `❌ Lỗi check-in: ${errorMessage}`,
+                    'error'
+                );
+            }
+
+            if (error.response?.status === 400) {
+                try {
+                    await fetchAllReservations();
+                    const updatedReservation = reservations.find(r => r.id === reservationId);
+                    if (updatedReservation?.status === 'CHECKED_IN') {
+                        showToast("Đặt bàn đã được check-in thành công!", "success");
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error checking reservation status:', e);
+                }
+            }
+
+            showToast(errorMessage, "error");
+
         } finally {
             setCheckingIn(null);
-        }
-    };
-
-    const handleEditTable = (table) => {
-        setEditingTable(table);
-        setEditTableData({ number: table.number, capacity: table.capacity, type: table.type || "Standard", status: table.status });
-        setShowEditTableModal(true);
-    };
-
-    const handleUpdateTable = async (e) => {
-        e.preventDefault();
-        try {
-            await axiosClient.patch(`/tables/${editingTable.id}`, editTableData);
-            showToast("Cập nhật bàn thành công!", "success");
-            fetchTables();
-            setShowEditTableModal(false);
-        } catch (error) {
-            showToast(error.response?.data?.message || "Cập nhật thất bại", "error");
+            console.log('=== CHECK-IN END ===');
         }
     };
 
@@ -394,16 +609,37 @@ const BookingPage = () => {
                 quantity: redeemQuantity
             });
             if (res.data?.success) {
+                // ✅ Gửi thông báo đổi quà thành công
+                const customerName = redeemCustomer?.customerName || redeemCustomer?.phone || 'Khách hàng';
+                const pointsUsed = selectedRedeemProduct.pointsRequired * redeemQuantity;
+
+                sendNotification(
+                    `🎁 Đổi quà thành công: ${customerName} - ${redeemQuantity}x ${selectedRedeemProduct.name} (${pointsUsed} điểm)`,
+                    'success'
+                );
+
                 showToast(res.data.message || 'Đổi sản phẩm thành công!', 'success');
                 setSelectedRedeemProduct(null);
                 setRedeemQuantity(1);
                 await fetchRedeemableProducts(redeemCustomer.phone);
                 await fetchAllCustomersForRedeem();
             } else {
-                showToast(res.data?.message || 'Đổi thất bại!', 'error');
+                const errorMsg = res.data?.message || 'Đổi thất bại!';
+                // ✅ Gửi thông báo lỗi đổi quà
+                sendNotification(
+                    `❌ Lỗi đổi quà: ${errorMsg}`,
+                    'error'
+                );
+                showToast(errorMsg, 'error');
             }
         } catch (err) {
-            showToast(err.response?.data?.message || 'Đổi thất bại!', 'error');
+            const errorMsg = err.response?.data?.message || 'Đổi thất bại!';
+            // ✅ Gửi thông báo lỗi đổi quà
+            sendNotification(
+                `❌ Lỗi đổi quà: ${errorMsg}`,
+                'error'
+            );
+            showToast(errorMsg, 'error');
         } finally {
             setRedeeming(false);
             setConfirmData(null);
@@ -474,7 +710,8 @@ const BookingPage = () => {
         const statusMap = {
             'FREE': { text: 'Trống', color: '#10b981', bg: '#d1fae5' },
             'OCCUPIED': { text: 'Đã có khách', color: '#ef4444', bg: '#fee2e2' },
-            'RESERVED': { text: 'Đã đặt trước', color: '#f59e0b', bg: '#fed7aa' }
+            'RESERVED': { text: 'Đã đặt trước', color: '#f59e0b', bg: '#fed7aa' },
+            'MAINTENANCE': { text: 'Bảo trì', color: '#6b7280', bg: '#f3f4f6' }
         };
         const s = statusMap[status] || { text: status, color: '#6b7280', bg: '#f3f4f6' };
         return (
@@ -482,13 +719,14 @@ const BookingPage = () => {
                 {status === 'FREE' && <Circle size={12} color="#10b981" />}
                 {status === 'OCCUPIED' && <CircleDot size={12} color="#ef4444" />}
                 {status === 'RESERVED' && <CircleOff size={12} color="#f59e0b" />}
+                {status === 'MAINTENANCE' && <Wrench size={12} />}
                 {s.text}
             </span>
         );
     };
 
     const availableTables = tables.filter(table => table.status === 'FREE');
-    const filteredTables = availableTables.filter(table =>
+    const filteredTables = tables.filter(table =>
         table.number?.toString().includes(searchTable) ||
         table.tableName?.toLowerCase().includes(searchTable.toLowerCase())
     );
@@ -501,6 +739,22 @@ const BookingPage = () => {
         setSearchTable("");
     };
 
+    const getUserRole = () => {
+        if (!user) return null;
+        if (user.role) return user.role;
+        if (user.roles && user.roles.length > 0) {
+            return user.roles[0].replace("ROLE_", "");
+        }
+        return null;
+    };
+
+    const userRole = getUserRole();
+    const isAdminOrStaff = userRole === 'ADMIN' || userRole === 'STAFF';
+    const isAdmin = userRole === 'ADMIN';
+
+    // ============================================================
+    // RENDER
+    // ============================================================
     return (
         <div className={styles.container}>
             {/* Toast Notification */}
@@ -579,37 +833,137 @@ const BookingPage = () => {
                     <Users size={18} /><span>Danh sách đặt bàn</span>
                     {displayReservations.length > 0 && <span className={styles.tabBadge}>{displayReservations.length}</span>}
                 </button>
-                <button className={`${styles.tabBtn} ${activeTab === "redeem" ? styles.activeTab : ""}`} onClick={openRedeemTab}>
-                    <Gift size={18} /><span>Đổi sản phẩm</span>
-                </button>
+                {(userRole === 'ADMIN' || userRole === 'STAFF') && (
+                    <button className={`${styles.tabBtn} ${activeTab === "redeem" ? styles.activeTab : ""}`} onClick={openRedeemTab}>
+                        <Gift size={18} /><span>Đổi sản phẩm</span>
+                    </button>
+                )}
             </div>
 
             {/* ========== TAB ĐẶT BÀN MỚI ========== */}
             {activeTab === "booking" && (
                 <div className={styles.bookingTab}>
                     <div className={styles.sectionHeader}>
-                        <h3><Table size={18} style={{ display: 'inline', marginRight: '6px' }} /> Chọn bàn nhanh</h3>
-                        <p>Click vào bàn trống để đặt - Bàn đỏ đang có khách</p>
+                        <h3><Table size={18} style={{ display: 'inline', marginRight: '6px' }} /> Danh sách bàn</h3>
+                        <p>
+                            <span style={{ color: '#10b981' }}>● Trống</span>
+                            <span style={{ color: '#f59e0b', marginLeft: '12px' }}>● Đã đặt trước</span>
+                            <span style={{ color: '#ef4444', marginLeft: '12px' }}>● Đang có khách</span>
+                            <span style={{ color: '#6b7280', marginLeft: '12px' }}>● Bảo trì</span>
+                        </p>
                     </div>
                     <div className={styles.tablesGrid}>
-                        {tables.map(table => (
-                            <div key={table.id} className={`${styles.tableCard} ${table.status !== 'FREE' ? styles.occupied : ''}`}>
-                                <div className={styles.tableCardHeader}>
-                                    <div className={styles.tableNumber}>Bàn {table.number}</div>
-                                    <button onClick={() => handleEditTable(table)} className={styles.editTableBtn} title="Sửa bàn">
-                                        <Edit size={14} />
-                                    </button>
-                                </div>
-                                <div className={styles.tableDetails}>
-                                    <div className={styles.tableDetail}><Users size={14} /><span>{table.capacity || 4} người</span></div>
-                                    <div className={styles.tableDetail}><MapPin size={14} /><span>{table.type || 'Standard'}</span></div>
-                                </div>
-                                <div className={styles.tableStatusWrapper}>{getTableStatusBadge(table.status)}</div>
-                                {table.status === 'FREE' && (
-                                    <button onClick={() => handleSelectTableAndOpenForm(table)} className={styles.bookBtn}>Đặt bàn ngay</button>
-                                )}
+                        {tables.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <div className={styles.emptyIcon}><Table size={48} color="#94a3b8" /></div>
+                                <h4>Chưa có bàn nào</h4>
+                                <p>Hiện tại chưa có bàn nào trong hệ thống</p>
                             </div>
-                        ))}
+                        ) : (
+                            tables.map(table => {
+                                const isAvailable = table.status === 'FREE';
+                                const isReserved = table.status === 'RESERVED';
+                                const isOccupied = table.status === 'OCCUPIED';
+                                const isMaintenance = table.status === 'MAINTENANCE';
+
+                                let statusText = '';
+                                let statusColor = '';
+                                let statusBg = '';
+
+                                if (isAvailable) {
+                                    statusText = 'Trống';
+                                    statusColor = '#10b981';
+                                    statusBg = '#d1fae5';
+                                } else if (isReserved) {
+                                    statusText = 'Đã đặt trước';
+                                    statusColor = '#d97706';
+                                    statusBg = '#fef3c7';
+                                } else if (isOccupied) {
+                                    statusText = 'Đang có khách';
+                                    statusColor = '#dc2626';
+                                    statusBg = '#fee2e2';
+                                } else if (isMaintenance) {
+                                    statusText = 'Đang bảo trì';
+                                    statusColor = '#6b7280';
+                                    statusBg = '#f3f4f6';
+                                }
+
+                                return (
+                                    <div
+                                        key={table.id}
+                                        className={`${styles.tableCard} ${!isAvailable ? styles.occupied : ''}`}
+                                    >
+                                        <div className={styles.tableCardHeader}>
+                                            <div className={styles.tableNumber}>
+                                                Bàn {table.number}
+                                                {table.tableName && table.tableName !== `Bàn ${table.number}` && (
+                                                    <span className={styles.tableNameSub}> - {table.tableName}</span>
+                                                )}
+                                            </div>
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingTable(table);
+                                                        setEditTableData({
+                                                            number: table.number,
+                                                            capacity: table.capacity,
+                                                            type: table.type || "Standard",
+                                                            status: table.status
+                                                        });
+                                                        setShowEditTableModal(true);
+                                                    }}
+                                                    className={styles.editTableBtn}
+                                                    title="Sửa bàn"
+                                                >
+                                                    <Edit size={14} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className={styles.tableDetails}>
+                                            <div className={styles.tableDetail}>
+                                                <Users size={14} />
+                                                <span>{table.capacity || 4} người</span>
+                                            </div>
+                                            <div className={styles.tableDetail}>
+                                                <MapPin size={14} />
+                                                <span>{table.type || 'Standard'}</span>
+                                            </div>
+                                            <div className={styles.tableStatusWrapper}>
+                                                <span
+                                                    className={styles.tableStatusBadge}
+                                                    style={{ background: statusBg, color: statusColor }}
+                                                >
+                                                    {statusText}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className={styles.tableActions}>
+                                            {isAvailable ? (
+                                                <button
+                                                    onClick={() => handleSelectTableAndOpenForm(table)}
+                                                    className={styles.bookBtn}
+                                                >
+                                                    Đặt bàn ngay
+                                                </button>
+                                            ) : isReserved ? (
+                                                <div className={styles.tableStatusMessage} style={{ color: statusColor, background: statusBg }}>
+                                                    <Clock size={14} /> {statusText}
+                                                </div>
+                                            ) : isOccupied ? (
+                                                <div className={styles.tableStatusMessage} style={{ color: statusColor, background: statusBg }}>
+                                                    <Users size={14} /> {statusText}
+                                                </div>
+                                            ) : isMaintenance ? (
+                                                <div className={styles.tableStatusMessage} style={{ color: statusColor, background: statusBg }}>
+                                                    <Wrench size={14} /> {statusText}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             )}
@@ -654,19 +1008,19 @@ const BookingPage = () => {
                                         )}
                                     </div>
                                     <div className={styles.reservationCardFooter}>
-                                        {res.status === 'PENDING' && (
+                                        {res.status === 'PENDING' && isAdminOrStaff && (
                                             <button onClick={() => openConfirmModal(res.id, "confirm")} disabled={confirming === res.id}
                                                 className={`${styles.actionBtn} ${styles.confirmAction}`}>
                                                 <Check size={16} />{confirming === res.id ? "Đang xử lý..." : "Xác nhận"}
                                             </button>
                                         )}
-                                        {res.status === 'CONFIRMED' && (
+                                        {res.status === 'CONFIRMED' && isAdminOrStaff && (
                                             <button onClick={() => handleCheckIn(res.id)} disabled={checkingIn === res.id}
                                                 className={`${styles.actionBtn} ${styles.checkinAction}`}>
                                                 <LogIn size={16} />{checkingIn === res.id ? "Đang xử lý..." : "Check-in"}
                                             </button>
                                         )}
-                                        {res.status !== 'CHECKED_IN' && res.status !== 'CANCELLED' && res.status !== 'COMPLETED' && (
+                                        {res.status !== 'CHECKED_IN' && res.status !== 'CANCELLED' && res.status !== 'COMPLETED' && isAdminOrStaff && (
                                             <button onClick={() => handleCancelReservationWithModal(res.id)}
                                                 className={`${styles.actionBtn} ${styles.cancelAction}`}>
                                                 <X size={16} /> Hủy
@@ -681,17 +1035,15 @@ const BookingPage = () => {
             )}
 
             {/* ========== TAB ĐỔI SẢN PHẨM ========== */}
-            {activeTab === "redeem" && (
+            {activeTab === "redeem" && isAdminOrStaff && (
                 <div className={styles.bookingTab}>
                     <div className={styles.sectionHeader}>
                         <h3><Gift size={18} style={{ display: 'inline', marginRight: '6px' }} /> Đổi sản phẩm bằng điểm</h3>
                         <p>{selectedCustomer ? 'Chọn sản phẩm để đổi' : 'Chọn khách hàng để xem sản phẩm có thể đổi'}</p>
                     </div>
 
-                    {/* ========== CHƯA CHỌN KHÁCH HÀNG -> HIỂN THỊ DANH SÁCH ========== */}
                     {!selectedCustomer ? (
                         <div style={{ background: '#1a1a2e', borderRadius: 16, border: '1px solid #2d2d3d', padding: 20 }}>
-                            {/* Thanh tìm kiếm khách hàng */}
                             <div style={{ marginBottom: 16, position: 'relative' }}>
                                 <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
                                 <input
@@ -709,7 +1061,6 @@ const BookingPage = () => {
                                 )}
                             </div>
 
-                            {/* Grid khách hàng */}
                             {filteredCustomers.length > 0 ? (
                                 <div>
                                     <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 12 }}>
@@ -791,9 +1142,7 @@ const BookingPage = () => {
                             )}
                         </div>
                     ) : (
-                        /* ========== ĐÃ CHỌN KHÁCH HÀNG -> HIỂN THỊ SẢN PHẨM ========== */
                         <div>
-                            {/* Thông tin khách hàng đã chọn */}
                             <div style={{
                                 background: '#1a1a2e', borderRadius: 16, border: '2px solid #8B5CF6',
                                 padding: 18, marginBottom: 20,
@@ -837,7 +1186,6 @@ const BookingPage = () => {
                                 </div>
                             </div>
 
-                            {/* Danh sách sản phẩm đổi được */}
                             <div style={{ background: '#1a1a2e', borderRadius: 16, border: '1px solid #2d2d3d', padding: 20 }}>
                                 {redeemProducts.length > 0 && (
                                     <div style={{ marginBottom: 16, position: 'relative' }}>
@@ -952,36 +1300,88 @@ const BookingPage = () => {
                                 <label>Chọn bàn <span className={styles.required}>*</span></label>
                                 <div className={styles.tableSelectWrapper}>
                                     <div className={styles.tableSelectTrigger} onClick={() => setShowTableDropdown(!showTableDropdown)}>
-                                        <span>{selectedTable ? `Bàn ${selectedTable.number} - ${selectedTable.capacity} chỗ - ${selectedTable.type || 'Standard'}` : "-- Chọn bàn --"}</span>
+                                        <span>
+                                            {selectedTable
+                                                ? `Bàn ${selectedTable.number} - ${selectedTable.capacity} chỗ - ${selectedTable.type || 'Standard'}`
+                                                : "-- Chọn bàn --"
+                                            }
+                                        </span>
                                         <ChevronDown size={16} className={showTableDropdown ? styles.rotated : ""} />
                                     </div>
                                     {showTableDropdown && (
                                         <div className={styles.tableDropdown}>
                                             <div className={styles.dropdownSearch}>
                                                 <Search size={14} />
-                                                <input type="text" placeholder="Tìm bàn trống..." value={searchTable} onChange={(e) => setSearchTable(e.target.value)} autoFocus />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Tìm bàn..."
+                                                    value={searchTable}
+                                                    onChange={(e) => setSearchTable(e.target.value)}
+                                                    autoFocus
+                                                />
                                             </div>
                                             <div className={styles.dropdownList}>
                                                 {filteredTables.length === 0 ? (
-                                                    <div className={styles.dropdownEmpty}>Không có bàn trống</div>
+                                                    <div className={styles.dropdownEmpty}>Không tìm thấy bàn</div>
                                                 ) : (
-                                                    filteredTables.map(table => (
-                                                        <div key={table.id} className={`${styles.dropdownItem} ${selectedTable?.id === table.id ? styles.selected : ''}`}
-                                                            onClick={() => handleSelectTableFromDropdown(table)}>
-                                                            <div className={styles.dropdownItemInfo}>
-                                                                <strong>Bàn {table.number}</strong>
-                                                                <span>{table.capacity} chỗ</span>
-                                                                <span>{table.type || 'Standard'}</span>
+                                                    filteredTables.map(table => {
+                                                        const isAvailable = table.status === 'FREE';
+                                                        const isReserved = table.status === 'RESERVED';
+                                                        const isOccupied = table.status === 'OCCUPIED';
+                                                        const isMaintenance = table.status === 'MAINTENANCE';
+
+                                                        let statusText = '';
+                                                        let statusColor = '';
+                                                        let statusBg = '';
+
+                                                        if (isAvailable) {
+                                                            statusText = ' Trống';
+                                                            statusColor = '#10b981';
+                                                            statusBg = '#d1fae5';
+                                                        } else if (isReserved) {
+                                                            statusText = ' Đã đặt';
+                                                            statusColor = '#d97706';
+                                                            statusBg = '#fef3c7';
+                                                        } else if (isOccupied) {
+                                                            statusText = ' Có khách';
+                                                            statusColor = '#dc2626';
+                                                            statusBg = '#fee2e2';
+                                                        } else if (isMaintenance) {
+                                                            statusText = ' Bảo trì';
+                                                            statusColor = '#6b7280';
+                                                            statusBg = '#f3f4f6';
+                                                        }
+
+                                                        return (
+                                                            <div
+                                                                key={table.id}
+                                                                className={`${styles.dropdownItem} ${selectedTable?.id === table.id ? styles.selected : ''}`}
+                                                                onClick={() => handleSelectTableFromDropdown(table)}
+                                                            >
+                                                                <div className={styles.dropdownItemInfo}>
+                                                                    <strong>Bàn {table.number}</strong>
+                                                                    <span>{table.capacity} chỗ</span>
+                                                                    <span>{table.type || 'Standard'}</span>
+                                                                </div>
+                                                                <div
+                                                                    className={styles.dropdownStatusTag}
+                                                                    style={{ background: statusBg, color: statusColor }}
+                                                                >
+                                                                    {statusText}
+                                                                </div>
                                                             </div>
-                                                            <div className={styles.availableTag}><Circle size={10} color="#10b981" style={{ display: 'inline', marginRight: '4px' }} />Trống</div>
-                                                        </div>
-                                                    ))
+                                                        );
+                                                    })
                                                 )}
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                                {selectedTable && <p className={styles.selectedHint}><Check size={14} style={{ display: 'inline' }} /> Đã chọn bàn {selectedTable.number}</p>}
+                                {selectedTable && (
+                                    <p className={styles.selectedHint}>
+                                        <Check size={14} style={{ display: 'inline' }} /> Đã chọn bàn {selectedTable.number}
+                                    </p>
+                                )}
                             </div>
                             <div className={styles.formRow}>
                                 <div className={styles.formField}>
@@ -1025,44 +1425,13 @@ const BookingPage = () => {
             )}
 
             {/* ========== MODAL CHỈNH SỬA BÀN ========== */}
-            {showEditTableModal && editingTable && (
+            {showEditTableModal && editingTable && isAdmin && (
                 <div className={styles.modalOverlay} onClick={() => setShowEditTableModal(false)}>
                     <div className={styles.modal} onClick={e => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <div className={styles.modalTitle}><Edit size={20} /><h3>Chỉnh sửa bàn</h3></div>
                             <button onClick={() => setShowEditTableModal(false)} className={styles.modalClose}><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleUpdateTable} className={styles.modalForm}>
-                            <div className={styles.formField}>
-                                <label>Số bàn <span className={styles.required}>*</span></label>
-                                <input type="text" value={editTableData.number} onChange={(e) => setEditTableData({ ...editTableData, number: e.target.value })} required />
-                            </div>
-                            <div className={styles.formField}>
-                                <label>Sức chứa (người) <span className={styles.required}>*</span></label>
-                                <input type="number" value={editTableData.capacity} onChange={(e) => setEditTableData({ ...editTableData, capacity: parseInt(e.target.value) })} min="1" max="20" required />
-                            </div>
-                            <div className={styles.formField}>
-                                <label>Loại bàn</label>
-                                <select value={editTableData.type} onChange={(e) => setEditTableData({ ...editTableData, type: e.target.value })}>
-                                    <option value="Standard">Standard</option>
-                                    <option value="VIP">VIP</option>
-                                    <option value="Gần cửa sổ">Gần cửa sổ</option>
-                                    <option value="Phòng riêng">Phòng riêng</option>
-                                </select>
-                            </div>
-                            <div className={styles.formField}>
-                                <label>Trạng thái</label>
-                                <select value={editTableData.status} onChange={(e) => setEditTableData({ ...editTableData, status: e.target.value })}>
-                                    <option value="FREE">Trống</option>
-                                    <option value="OCCUPIED">Đã có khách</option>
-                                    <option value="RESERVED">Đã đặt trước</option>
-                                </select>
-                            </div>
-                            <div className={styles.modalFooter}>
-                                <button type="button" onClick={() => setShowEditTableModal(false)} className={styles.cancelModalBtn}>Hủy</button>
-                                <button type="submit" className={styles.submitModalBtn}>Lưu thay đổi</button>
-                            </div>
-                        </form>
                     </div>
                 </div>
             )}

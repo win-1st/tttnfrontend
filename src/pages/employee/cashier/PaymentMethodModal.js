@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axiosClient from "../../../services/axiosClient";
 import styles from "./TableDetail.module.css";
 
-const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, entityNumber, entityType }) => {
+const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, entityNumber, entityType, customerPhone }) => {
     const [isProcessing, setIsProcessing] = useState(false);
 
     if (!show) return null;
@@ -10,19 +10,27 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
     const handleBankTransfer = async () => {
         setIsProcessing(true);
         try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Vui lòng đăng nhập lại!');
+                window.location.href = '/login';
+                return;
+            }
+
             const orderCode = Math.floor(Date.now() / 1000);
 
-            // ✅ LƯU ĐÚNG paymentMethod
+            // ✅ LƯU CẢ CUSTOMER PHONE
             sessionStorage.setItem('tempCashierPayment', JSON.stringify({
                 orderId: orderId,
                 totalAmount: totalAmount,
                 entityNumber: entityNumber,
                 entityType: entityType,
-                paymentMethod: "BANKING"  // ← QUAN TRỌNG
+                paymentMethod: "PAYOS",
+                customerPhone: customerPhone  // ✅ THÊM customerPhone
             }));
 
             const cancelUrl = `${window.location.origin}/cashier/payment-cancel`;
-            const returnUrl = `${window.location.origin}/cashier/payment-success?orderId=${orderId}&method=BANKING`;
+            const returnUrl = `${window.location.origin}/cashier/payment-success?orderId=${orderId}&method=PAYOS`;
 
             const response = await axiosClient.post('/payos/create', {
                 orderCode: orderCode,
@@ -31,6 +39,10 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
                 returnUrl: returnUrl,
                 cancelUrl: cancelUrl,
                 items: []
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
 
             if (response.data?.data?.checkoutUrl) {
@@ -40,7 +52,12 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
             }
         } catch (error) {
             console.error('Lỗi thanh toán:', error);
-            alert('Có lỗi xảy ra: ' + (error.response?.data?.message || error.message));
+            if (error.response?.status === 401) {
+                alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
+                window.location.href = '/login';
+            } else {
+                alert('Có lỗi xảy ra: ' + (error.response?.data?.message || error.message));
+            }
         } finally {
             setIsProcessing(false);
         }
@@ -49,15 +66,23 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
     const handleMomoPayment = async () => {
         setIsProcessing(true);
         try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Vui lòng đăng nhập lại!');
+                window.location.href = '/login';
+                return;
+            }
+
             const orderCode = Math.floor(Date.now() / 1000);
 
-            // ✅ LƯU ĐÚNG paymentMethod
+            // ✅ LƯU CẢ CUSTOMER PHONE
             sessionStorage.setItem('tempCashierPayment', JSON.stringify({
                 orderId: orderId,
                 totalAmount: totalAmount,
                 entityNumber: entityNumber,
                 entityType: entityType,
-                paymentMethod: "MOMO"  // ← QUAN TRỌNG
+                paymentMethod: "MOMO",
+                customerPhone: customerPhone  // ✅ THÊM customerPhone
             }));
 
             const cancelUrl = `${window.location.origin}/cashier/payment-cancel`;
@@ -70,6 +95,10 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
                 returnUrl: returnUrl,
                 cancelUrl: cancelUrl,
                 items: []
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
 
             if (response.data?.data?.checkoutUrl) {
@@ -79,7 +108,12 @@ const PaymentMethodModal = ({ show, onClose, onSelect, orderId, totalAmount, ent
             }
         } catch (error) {
             console.error('Lỗi thanh toán Momo:', error);
-            alert('Có lỗi xảy ra: ' + (error.response?.data?.message || error.message));
+            if (error.response?.status === 401) {
+                alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
+                window.location.href = '/login';
+            } else {
+                alert('Có lỗi xảy ra: ' + (error.response?.data?.message || error.message));
+            }
         } finally {
             setIsProcessing(false);
         }

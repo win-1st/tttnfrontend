@@ -13,7 +13,15 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingTable, setEditingTable] = useState(null);
     const [formData, setFormData] = useState({
+        name: '',
+        number: '',
+        capacity: '',
+        type: 'STANDARD'
+    });
+    const [editFormData, setEditFormData] = useState({
         name: '',
         number: '',
         capacity: '',
@@ -84,7 +92,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         return tables.some(table => table.number === parseInt(number));
     };
 
-    // Thêm bàn mới
+    // ===== THÊM BÀN MỚI =====
     const handleCreate = async (e) => {
         e.preventDefault();
 
@@ -139,7 +147,72 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         }
     };
 
-    // Cập nhật trạng thái bàn
+    // ===== SỬA BÀN =====
+    const handleEditTable = (table) => {
+        setEditingTable(table);
+        setEditFormData({
+            name: table.tableName || '',
+            number: table.number,
+            capacity: table.capacity,
+            type: table.type || 'STANDARD'
+        });
+        setShowEditModal(true);
+    };
+
+    const handleUpdateTable = async (e) => {
+        e.preventDefault();
+
+        if (!editFormData.number || !editFormData.capacity) {
+            showToast('Vui lòng nhập đầy đủ thông tin!', 'warning');
+            return;
+        }
+
+        // Kiểm tra số bàn trùng (khác với bàn đang sửa)
+        if (editFormData.number !== editingTable.number && isTableNumberExist(editFormData.number)) {
+            showToast(`Số bàn ${editFormData.number} đã tồn tại!`, 'error');
+            return;
+        }
+
+        setSubmitting(true);
+        const token = getToken();
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        try {
+            const payload = {
+                name: editFormData.name || `Bàn ${editFormData.number}`,
+                number: parseInt(editFormData.number),
+                capacity: parseInt(editFormData.capacity),
+                type: editFormData.type
+            };
+
+            const response = await axios.put(
+                `${API_BASE_URL}/api/tables/${editingTable.id}`,
+                payload,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (response.data?.success) {
+                showToast(`✅ Cập nhật bàn số ${editFormData.number} thành công!`, 'success');
+                setShowEditModal(false);
+                setEditingTable(null);
+                fetchTables();
+                if (setRefreshTrigger) setRefreshTrigger(prev => prev + 1);
+            } else {
+                showToast(response.data?.message || 'Cập nhật thất bại!', 'error');
+            }
+        } catch (error) {
+            console.error('Lỗi cập nhật bàn:', error);
+            const errorMsg = error.response?.data?.message || error.response?.data || 'Cập nhật bàn thất bại!';
+            showToast(errorMsg, 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // ===== CẬP NHẬT TRẠNG THÁI BÀN =====
     const handleUpdateStatus = async (id, status) => {
         const token = getToken();
         if (!token) {
@@ -170,7 +243,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         }
     };
 
-    // Xóa bàn
+    // ===== XÓA BÀN =====
     const handleDelete = async (id, tableNumber) => {
         if (!window.confirm(`Bạn có chắc muốn xóa bàn số ${tableNumber}?`)) return;
 
@@ -198,6 +271,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         }
     };
 
+    // ===== HELPER FUNCTIONS =====
     const getStatusColor = (status) => {
         switch (status) {
             case 'FREE': return '#10B981';
@@ -242,12 +316,14 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
         }
     };
 
+    // Lọc bàn theo từ khóa tìm kiếm
     const filteredTables = tables.filter(t =>
         t.number?.toString().includes(searchTerm) ||
         t.tableName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.type?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // ===== RENDER =====
     if (loading) {
         return (
             <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
@@ -264,7 +340,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
 
     return (
         <div>
-            {/* ===== RENDER TOAST ===== */}
+            {/* ===== TOAST ===== */}
             {toast && (
                 <div style={{
                     position: 'fixed',
@@ -283,6 +359,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 </div>
             )}
 
+            {/* ===== HEADER ===== */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
                     <h2 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -300,7 +377,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 </button>
             </div>
 
-            {/* Tìm kiếm */}
+            {/* ===== TÌM KIẾM ===== */}
             <div style={{ marginBottom: '20px', position: 'relative' }}>
                 <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
                 <input
@@ -312,14 +389,14 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 />
             </div>
 
-            {/* Nút làm mới */}
+            {/* ===== NÚT LÀM MỚI ===== */}
             <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
                 <button onClick={fetchTables} style={{ padding: '8px 16px', background: '#2d2d3d', color: '#94a3b8', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <RefreshCw size={16} /> Làm mới
                 </button>
             </div>
 
-            {/* Danh sách bàn */}
+            {/* ===== DANH SÁCH BÀN ===== */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
                 {filteredTables.map(table => (
                     <div key={table.id} style={{ background: '#1a1a2e', border: `2px solid ${getStatusColor(table.status)}`, borderRadius: '16px', padding: '20px', transition: 'transform 0.2s' }}
@@ -335,13 +412,22 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                                     <Hash size={12} /> Số bàn: #{table.number} | ID: {table.id}
                                 </p>
                             </div>
-                            <button
-                                onClick={() => handleDelete(table.id, table.number)}
-                                style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', cursor: 'pointer' }}
-                                title="Xóa bàn"
-                            >
-                                <Trash2 size={16} color="#EF4444" />
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => handleEditTable(table)}
+                                    style={{ padding: '6px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', cursor: 'pointer' }}
+                                    title="Sửa bàn"
+                                >
+                                    <Edit2 size={16} color="#3B82F6" />
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(table.id, table.number)}
+                                    style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', cursor: 'pointer' }}
+                                    title="Xóa bàn"
+                                >
+                                    <Trash2 size={16} color="#EF4444" />
+                                </button>
+                            </div>
                         </div>
 
                         <div style={{ marginBottom: '16px' }}>
@@ -409,7 +495,7 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                 )}
             </div>
 
-            {/* MODAL THÊM BÀN */}
+            {/* ===== MODAL THÊM BÀN ===== */}
             {showModal && (
                 <div style={{
                     position: 'fixed',
@@ -541,6 +627,149 @@ export default function TableManagement({ tables, setTables, refreshTrigger, set
                                     }}
                                 >
                                     {submitting ? 'Đang thêm...' : 'Thêm bàn'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ===== MODAL SỬA BÀN ===== */}
+            {showEditModal && editingTable && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }} onClick={() => setShowEditModal(false)}>
+                    <div style={{
+                        background: '#1a1a2e',
+                        border: '1px solid #2d2d3d',
+                        borderRadius: '20px',
+                        width: '90%',
+                        maxWidth: '500px',
+                        padding: '28px'
+                    }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '22px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Edit2 size={20} color="#3B82F6" /> Sửa bàn #{editingTable.number}
+                            </h3>
+                            <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateTable}>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    Tên bàn <span style={{ color: '#64748B', fontSize: '12px' }}>(tùy chọn)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editFormData.name}
+                                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                                    placeholder="VD: Bàn VIP 1, Bàn Pro, Bàn Góc..."
+                                    style={{ width: '100%', padding: '12px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '10px', color: 'white', fontSize: '14px', outline: 'none' }}
+                                />
+                            </div>
+
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Hash size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                                    Số bàn <span style={{ color: '#ff6b6b' }}>*</span>
+                                    <span style={{ color: '#64748B', fontSize: '12px', marginLeft: '8px' }}>(không được trùng)</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    value={editFormData.number}
+                                    onChange={(e) => setEditFormData({ ...editFormData, number: e.target.value })}
+                                    placeholder="VD: 1, 2, 3..."
+                                    required
+                                    min="1"
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: '#0f0f1a',
+                                        border: `1px solid ${editFormData.number !== editingTable.number && editFormData.number && isTableNumberExist(editFormData.number) ? '#EF4444' : '#2d2d3d'}`,
+                                        borderRadius: '10px',
+                                        color: 'white',
+                                        fontSize: '14px',
+                                        outline: 'none'
+                                    }}
+                                />
+                                {editFormData.number !== editingTable.number && editFormData.number && isTableNumberExist(editFormData.number) && (
+                                    <p style={{ color: '#EF4444', fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <AlertCircle size={12} /> Số bàn {editFormData.number} đã tồn tại!
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Package size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                                    Loại bàn <span style={{ color: '#ff6b6b' }}>*</span>
+                                </label>
+                                <select
+                                    value={editFormData.type}
+                                    onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
+                                    style={{ width: '100%', padding: '12px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '10px', color: 'white', fontSize: '14px', outline: 'none' }}
+                                >
+                                    <option value="STANDARD">Tiêu chuẩn</option>
+                                    <option value="PREMIUM">Premium</option>
+                                    <option value="VIP">VIP</option>
+                                </select>
+                            </div>
+
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>
+                                    <Users size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                                    Sức chứa <span style={{ color: '#ff6b6b' }}>*</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    value={editFormData.capacity}
+                                    onChange={(e) => setEditFormData({ ...editFormData, capacity: e.target.value })}
+                                    placeholder="Số người tối đa"
+                                    required
+                                    min="1"
+                                    style={{ width: '100%', padding: '12px', background: '#0f0f1a', border: '1px solid #2d2d3d', borderRadius: '10px', color: 'white', fontSize: '14px', outline: 'none' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    style={{ flex: 1, padding: '12px', background: '#2d2d3d', color: '#94a3b8', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '600' }}
+                                >
+                                    Hủy
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submitting || (editFormData.number !== editingTable.number && editFormData.number && isTableNumberExist(editFormData.number))}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: '#3B82F6',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '10px',
+                                        cursor: (submitting || (editFormData.number !== editingTable.number && editFormData.number && isTableNumberExist(editFormData.number))) ? 'not-allowed' : 'pointer',
+                                        fontWeight: '600',
+                                        opacity: (submitting || (editFormData.number !== editingTable.number && editFormData.number && isTableNumberExist(editFormData.number))) ? 0.5 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    <Edit2 size={16} /> {submitting ? 'Đang cập nhật...' : 'Cập nhật'}
                                 </button>
                             </div>
                         </form>

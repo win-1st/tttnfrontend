@@ -1,4 +1,4 @@
-// src/services/websocketService.js
+// ========== FILE: src/services/websocketService.js ==========
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
@@ -8,11 +8,15 @@ class WebSocketService {
     constructor() {
         this.client = null;
         this.isConnected = false;
-        this.callbacks = [];
+        this.tableStatusCallback = null;
+        this.newReservationCallback = null;
     }
 
     connect(token) {
-        if (this.client?.active) return Promise.resolve();
+        if (this.client?.active) {
+            console.log('WebSocket already connected');
+            return Promise.resolve();
+        }
 
         this.client = new Client({
             webSocketFactory: () => new SockJS(SOCKET_URL),
@@ -21,6 +25,9 @@ class WebSocketService {
             },
             debug: (str) => {
                 // Chỉ log khi development
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('WS debug:', str);
+                }
             },
             reconnectDelay: 5000,
             heartbeatIncoming: 4000,
@@ -38,8 +45,12 @@ class WebSocketService {
                         const data = JSON.parse(message.body);
                         console.log('📡 Table status update:', data);
 
-                        // Notify all callbacks
-                        this.callbacks.forEach(cb => cb(data));
+                        if (this.tableStatusCallback) {
+                            this.tableStatusCallback(data);
+                        }
+                        if (this.newReservationCallback && data.status === 'RESERVED') {
+                            this.newReservationCallback(data);
+                        }
                     } catch (error) {
                         console.error('WS parse error:', error);
                     }
@@ -62,23 +73,12 @@ class WebSocketService {
         });
     }
 
-    // Method cho Home.js (setTableStatusCallback)
     setTableStatusCallback(callback) {
-        // Xóa tất cả callbacks cũ
-        this.callbacks = [];
-        // Thêm callback mới nếu có
-        if (callback) {
-            this.callbacks.push(callback);
-        }
+        this.tableStatusCallback = callback;
     }
 
-    // Method cho các component khác (onTableStatusChange)
-    onTableStatusChange(callback) {
-        this.callbacks.push(callback);
-        // Return function to remove callback
-        return () => {
-            this.callbacks = this.callbacks.filter(cb => cb !== callback);
-        };
+    setNewReservationCallback(callback) {
+        this.newReservationCallback = callback;
     }
 
     disconnect() {
@@ -86,7 +86,8 @@ class WebSocketService {
             this.client.deactivate();
         }
         this.isConnected = false;
-        this.callbacks = [];
+        this.tableStatusCallback = null;
+        this.newReservationCallback = null;
     }
 }
 

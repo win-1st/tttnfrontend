@@ -2,6 +2,26 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axiosClient from "../../../services/axiosClient";
 
+// ✅ Hàm gửi thông báo
+const sendNotification = (message, type = 'info') => {
+    const notification = {
+        id: Date.now(),
+        message: message,
+        type: type,
+        time: new Date().toLocaleTimeString('vi-VN'),
+        read: false,
+        timestamp: new Date().toISOString()
+    };
+
+    const existing = JSON.parse(localStorage.getItem('notifications') || '[]');
+    const updated = [notification, ...existing].slice(0, 50);
+    localStorage.setItem('notifications', JSON.stringify(updated));
+
+    window.dispatchEvent(new CustomEvent('newNotification', {
+        detail: notification
+    }));
+};
+
 const CashierPaymentSuccess = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -10,14 +30,19 @@ const CashierPaymentSuccess = () => {
     useEffect(() => {
         const processPayment = async () => {
             try {
-                // Lấy orderId và method từ URL
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    console.error("No token found, redirecting to login");
+                    navigate('/login', { replace: true });
+                    return;
+                }
+
                 let orderId = searchParams.get('orderId');
                 let method = searchParams.get('method');
 
                 console.log("💰 Payment success - Order ID:", orderId);
                 console.log("Method from URL:", method);
 
-                // Lấy từ sessionStorage nếu URL không có
                 const tempPaymentData = sessionStorage.getItem('tempCashierPayment');
                 let paymentData = null;
 
@@ -26,43 +51,63 @@ const CashierPaymentSuccess = () => {
                     console.log("Payment data from session:", paymentData);
                 }
 
-                // Xác định orderId và method
                 const finalOrderId = orderId || paymentData?.orderId;
-                const finalMethod = method || paymentData?.paymentMethod || "BANKING";
+                let finalMethod = method || paymentData?.paymentMethod || "CASH";
+                const customerPhone = paymentData?.customerPhone || null;
+                const entityNumber = paymentData?.entityNumber || 'N/A';
+                const totalAmount = paymentData?.totalAmount || 0;
 
-                if (!finalOrderId) {
-                    console.error("No orderId found");
-                    setStatus("error");
-                    // Đánh dấu lỗi
-                    sessionStorage.setItem('paymentErrorMessage', 'true');
-                    setTimeout(() => {
-                        navigate('/cashier/tables', { replace: true });
-                    }, 1500);
-                    return;
-                }
+                // ✅ MAP METHOD
+                const methodMapping = {
+                    'BANKING': 'PAYOS',
+                    'PAYOS': 'PAYOS',
+                    'MOMO': 'MOMO',
+                    'CASH': 'CASH'
+                };
 
-                console.log(`Processing payment: orderId=${finalOrderId}, method=${finalMethod}`);
+                finalMethod = methodMapping[finalMethod] || 'CASH';
 
-                // Gọi API tạo bill và thanh toán
+                console.log(`Processing payment: orderId=${finalOrderId}, method=${finalMethod}, customerPhone=${customerPhone}`);
+
+                // ✅ GỌI API TẠO BILL
                 const response = await axiosClient.post(`/bills/create`, null, {
                     params: {
                         orderId: finalOrderId,
-                        method: finalMethod
+                        method: finalMethod,
+                        customerPhone: customerPhone
+                    },
+                    headers: {
+                        'Authorization': `Bearer ${token}`
                     }
                 });
 
                 console.log("✅ Bill created:", response.data);
 
-                // Xóa session storage
+                // ✅ GỬI THÔNG BÁO THANH TOÁN THÀNH CÔNG
+                const billData = response.data?.data || response.data || {};
+                const finalTotal = billData.totalAmount || totalAmount;
+
+                sendNotification(
+                    `💰 Thanh toán thành công bàn ${entityNumber} - ${finalTotal.toLocaleString('vi-VN')}đ`,
+                    'success'
+                );
+
+                // Nếu có khách hàng, gửi thêm thông báo tích điểm
+                if (customerPhone) {
+                    const pointsEarned = Math.floor(finalTotal / 10000);
+                    if (pointsEarned > 0) {
+                        sendNotification(
+                            `⭐ Khách hàng ${customerPhone} được cộng ${pointsEarned} điểm`,
+                            'info'
+                        );
+                    }
+                }
+
                 sessionStorage.removeItem('tempCashierPayment');
                 sessionStorage.removeItem('lastEntity');
 
-                // ✅ Đánh dấu thanh toán thành công (để hiển thị toast)
-                sessionStorage.setItem('paymentSuccessMessage', 'true');
-
                 setStatus("success");
 
-                // Chuyển về trang tables sau 1.5 giây (giống như hủy)
                 setTimeout(() => {
                     navigate('/cashier/tables', { replace: true });
                 }, 1500);
@@ -70,9 +115,21 @@ const CashierPaymentSuccess = () => {
             } catch (error) {
                 console.error("Error processing payment:", error);
                 console.error("Error response:", error.response?.data);
+
+                // ✅ GỬI THÔNG BÁO LỖI
+                sendNotification(
+                    `❌ Lỗi thanh toán: ${error.response?.data?.message || error.message}`,
+                    'error'
+                );
+
+                if (error.response?.status === 401) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    navigate('/login', { replace: true });
+                    return;
+                }
+
                 setStatus("error");
-                // Đánh dấu lỗi
-                sessionStorage.setItem('paymentErrorMessage', 'true');
                 setTimeout(() => {
                     navigate('/cashier/tables', { replace: true });
                 }, 1500);

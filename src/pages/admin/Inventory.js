@@ -422,8 +422,12 @@ export default function Inventory() {
                             currentTransactions.map(tx => (
                                 <tr key={tx.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
                                     <td style={td}>#{tx.id}</td>
-                                    <td style={{ ...td, color: 'white', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <Package size={14} color="#64748B" /> {tx.product?.name || '-'}
+                                    <td style={{ ...td, color: 'white', fontWeight: 500 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Package size={14} color="#64748B" />
+                                            {/* ✅ SỬA: Dùng tx.productName */}
+                                            {tx.productName || tx.product?.name || '-'}
+                                        </div>
                                     </td>
                                     <td style={td}>
                                         <span style={badgeStyle(tx.transactionType)}>
@@ -435,11 +439,18 @@ export default function Inventory() {
                                     <td style={td}>{tx.beforeQuantity}</td>
                                     <td style={td}>{tx.afterQuantity}</td>
                                     <td style={td}>{tx.note || '-'}</td>
-                                    <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <User size={14} color="#64748B" /> {tx.user?.fullName || '-'}
+                                    <td style={{ ...td }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <User size={14} color="#64748B" />
+                                            {/* ✅ SỬA: Dùng tx.userFullName */}
+                                            {tx.userFullName || tx.user?.fullName || '-'}
+                                        </div>
                                     </td>
-                                    <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <Calendar size={14} color="#64748B" /> {new Date(tx.createdAt).toLocaleString('vi-VN')}
+                                    <td style={{ ...td }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Calendar size={14} color="#64748B" />
+                                            {new Date(tx.createdAt).toLocaleString('vi-VN')}
+                                        </div>
                                     </td>
                                 </tr>
                             ))

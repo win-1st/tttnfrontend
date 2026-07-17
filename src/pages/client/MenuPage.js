@@ -14,7 +14,7 @@ const MenuPage = () => {
 
     // Phân trang
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 12; // Tăng từ 10 lên 12
 
     const API_BASE_URL = 'http://localhost:8080';
 

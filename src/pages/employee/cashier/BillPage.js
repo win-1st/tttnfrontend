@@ -19,7 +19,9 @@ const BillPage = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [selectedBill, setSelectedBill] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
     const itemsPerPage = 10;
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
 
     useEffect(() => {
         fetchBills();
@@ -149,6 +151,287 @@ const BillPage = () => {
         }
     };
 
+    // ✅ HÀM IN HÓA ĐƠN - Lấy dữ liệu chi tiết trước khi in
+    const printBill = async (bill) => {
+        if (!bill) return;
+
+        setIsPrinting(true);
+        try {
+            // Lấy chi tiết hóa đơn từ API
+            const res = await axiosClient.get(`/bills/${bill.id}`);
+            const billData = res.data?.data || res.data;
+
+            // In với dữ liệu đầy đủ
+            renderPrintBill(billData);
+        } catch (err) {
+            console.error("Lỗi lấy chi tiết hóa đơn:", err);
+            // Nếu không lấy được, in với dữ liệu hiện có
+            renderPrintBill(bill);
+        } finally {
+            setIsPrinting(false);
+        }
+    };
+
+    // ✅ HÀM RENDER IN HÓA ĐƠN
+    const renderPrintBill = (bill) => {
+        if (!bill) return;
+
+        const formatPrice = (price) => price ? price.toLocaleString('vi-VN') + 'đ' : '0đ';
+        const items = bill.items || [];
+        const tableNumber = bill.tableNumber || bill.order?.table?.number || bill.table?.number || '--';
+
+        const billHTML = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Hóa đơn #${bill.id}</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 20px;
+                    width: 300px;
+                    margin: 0 auto;
+                }
+                .bill-container {
+                    border: 1px solid #000;
+                    padding: 15px;
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 15px;
+                    border-bottom: 1px dashed #000;
+                    padding-bottom: 10px;
+                }
+                .header h2 {
+                    font-size: 18px;
+                    margin-bottom: 4px;
+                }
+                .header p {
+                    font-size: 10px;
+                    color: #666;
+                    margin: 2px 0;
+                }
+                .info-row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 4px 0;
+                }
+                .info-row span:first-child {
+                    color: #666;
+                }
+                .info-row span:last-child {
+                    font-weight: 600;
+                }
+                .divider {
+                    border-top: 1px dashed #000;
+                    margin: 8px 0;
+                }
+                .items-table {
+                    width: 100%;
+                    margin: 8px 0;
+                    border-collapse: collapse;
+                }
+                .items-table th {
+                    text-align: left;
+                    font-size: 11px;
+                    border-bottom: 1px dotted #ccc;
+                    padding: 4px 0;
+                    color: #666;
+                }
+                .items-table td {
+                    padding: 4px 0;
+                    border-bottom: 1px dotted #eee;
+                }
+                .items-table td:last-child {
+                    text-align: right;
+                }
+                .items-table .text-center {
+                    text-align: center;
+                }
+                .total-line {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 4px 0;
+                    font-weight: 600;
+                }
+                .total-line .label {
+                    color: #666;
+                }
+                .total-line .value {
+                    font-weight: 700;
+                }
+                .grand-total {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    border-top: 2px solid #000;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+                .grand-total .label {
+                    font-size: 14px;
+                }
+                .grand-total .value {
+                    font-size: 16px;
+                    color: #dc2626;
+                }
+                .discount-line {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 4px 0;
+                    color: #16a34a;
+                    font-size: 11px;
+                }
+                .footer {
+                    text-align: center;
+                    margin-top: 15px;
+                    padding-top: 10px;
+                    border-top: 1px dashed #000;
+                    font-size: 10px;
+                    color: #666;
+                }
+                .footer p {
+                    margin: 2px 0;
+                }
+                .status-badge {
+                    display: inline-block;
+                    padding: 2px 8px;
+                    border-radius: 4px;
+                    font-size: 10px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                }
+                .status-paid {
+                    background: #d1fae5;
+                    color: #059669;
+                }
+                .status-pending {
+                    background: #fef3c7;
+                    color: #d97706;
+                }
+                .status-cancelled {
+                    background: #fee2e2;
+                    color: #dc2626;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="bill-container">
+                <!-- Header -->
+                <div class="header">
+                    <h2>🏠 BIDA HOUSE</h2>
+                    <p>123 Đường ABC, TP.HCM</p>
+                    <p>Tel: 0123 456 789</p>
+                </div>
+
+                <!-- Bill Info -->
+                <div class="info-row">
+                    <span>Mã hóa đơn:</span>
+                    <span>#${bill.id}</span>
+                </div>
+                <div class="info-row">
+                    <span>Bàn số:</span>
+                    <span><strong>${tableNumber}</strong></span>
+                </div>
+                <div class="info-row">
+                    <span>Ngày giờ:</span>
+                    <span>${formatDateTime(bill.createdAt)}</span>
+                </div>
+                <div class="info-row">
+                    <span>Nhân viên:</span>
+                    <span>${userData.fullName || userData.username || 'Nhân viên'}</span>
+                </div>
+                <div class="info-row">
+                    <span>Trạng thái:</span>
+                    <span>
+                        <span class="status-badge status-${bill.paymentStatus?.toLowerCase() || 'pending'}">
+                            ${bill.paymentStatus === 'PAID' ? 'ĐÃ THANH TOÁN' :
+                bill.paymentStatus === 'PENDING' ? 'CHỜ THANH TOÁN' :
+                    bill.paymentStatus === 'CANCELLED' ? 'ĐÃ HỦY' : bill.paymentStatus}
+                        </span>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span>Phương thức:</span>
+                    <span>${getPaymentMethodLabel(bill.paymentMethod)}</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Items -->
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th>Tên món</th>
+                            <th style="text-align:center">SL</th>
+                            <th style="text-align:right">Thành tiền</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.length > 0 ? items.map(item => `
+                            <tr>
+                                <td>${item.product?.name || item.name || 'Món ăn'}</td>
+                                <td class="text-center">×${item.quantity || 1}</td>
+                                <td>${formatPrice((item.unitPrice || item.price || 0) * (item.quantity || 1))}</td>
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="3" style="text-align:center;color:#999;padding:10px 0;">
+                                    Không có món nào
+                                </td>
+                            </tr>
+                        `}
+                    </tbody>
+                </table>
+
+                <div class="divider"></div>
+
+                <!-- Totals -->
+                <div class="total-line">
+                    <span class="label">Tổng tiền món:</span>
+                    <span class="value">${formatPrice(getOriginalTotal(bill))}</span>
+                </div>
+                ${getDiscountAmount(bill) > 0 ? `
+                    <div class="discount-line">
+                        <span>🎯 Khuyến mãi giảm:</span>
+                        <span>-${formatPrice(getDiscountAmount(bill))}</span>
+                    </div>
+                ` : ''}
+
+                <div class="grand-total">
+                    <span class="label">THỰC THU</span>
+                    <span class="value">${formatPrice(bill.totalAmount)}</span>
+                </div>
+
+                <!-- Footer -->
+                <div class="footer">
+                    <p>Cảm ơn quý khách! Hẹn gặp lại!</p>
+                    <p style="font-size:9px;color:#999;margin-top:4px;">
+                        Hóa đơn được tạo tự động
+                    </p>
+                </div>
+            </div>
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(() => window.close(), 500);
+                }
+            </script>
+        </body>
+        </html>`;
+
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        printWindow.document.write(billHTML);
+        printWindow.document.close();
+    };
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
@@ -159,8 +442,9 @@ const BillPage = () => {
                     </h2>
                     <p className={styles.pageSubtitle}>Quản lý và theo dõi tất cả hóa đơn của nhà hàng</p>
                 </div>
-                <button onClick={fetchBills} className={styles.refreshBtn}>
-                    <RefreshCw size={18} /> Làm mới
+                <button onClick={fetchBills} className={styles.refreshBtn} disabled={loading}>
+                    <RefreshCw size={18} className={loading ? styles.spin : ''} />
+                    {loading ? 'Đang tải...' : 'Làm mới'}
                 </button>
             </div>
 
@@ -259,8 +543,17 @@ const BillPage = () => {
                                             onClick={() => handleViewDetail(bill)}
                                             className={styles.actionBtn}
                                             title="Xem chi tiết"
+                                            disabled={isPrinting}
                                         >
                                             <Eye size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => printBill(bill)}
+                                            className={`${styles.actionBtn} ${styles.actionBtnPrint}`}
+                                            title="In hóa đơn"
+                                            disabled={isPrinting}
+                                        >
+                                            {isPrinting ? <RefreshCw size={18} className={styles.spin} /> : <Printer size={18} />}
                                         </button>
                                         {bill.paymentStatus === 'PENDING' && (
                                             <button
@@ -412,12 +705,23 @@ const BillPage = () => {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setShowDetailModal(false)}
-                            className={styles.modalCloseButton}
-                        >
-                            <X size={18} /> Đóng
-                        </button>
+                        {/* Nút in và đóng */}
+                        <div className={styles.modalActions}>
+                            <button
+                                onClick={() => printBill(selectedBill)}
+                                className={styles.printBtn}
+                                disabled={isPrinting}
+                            >
+                                {isPrinting ? <RefreshCw size={18} className={styles.spin} /> : <Printer size={18} />}
+                                {isPrinting ? 'Đang in...' : 'In hóa đơn'}
+                            </button>
+                            <button
+                                onClick={() => setShowDetailModal(false)}
+                                className={styles.modalCloseButton}
+                            >
+                                <X size={18} /> Đóng
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

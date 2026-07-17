@@ -46,9 +46,26 @@ import Inventory from '../pages/admin/Inventory';
 
 export default function AdminLayout() {
     const navigate = useNavigate();
+
+    // ✅ TẤT CẢ HOOKS PHẢI ĐƯỢC GỌI Ở ĐẦU COMPONENT
     const [activeMenu, setActiveMenu] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [user, setUser] = useState(null);
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // Data state - PHẢI ĐƯỢC KHAI BÁO Ở ĐÂY, KHÔNG ĐỂ SAU if
+    const [products, setProducts] = useState([]);
+    const [promotions, setPromotions] = useState([]);
+    const [employees, setEmployees] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [branchtable, setBranchtable] = useState([]);
+
+    // Modal state
+    const [modalType, setModalType] = useState('');
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [refreshCallback, setRefreshCallback] = useState(null);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -66,44 +83,64 @@ export default function AdminLayout() {
 
     useEffect(() => {
         const token = localStorage.getItem('token');
-        const loggedUser = JSON.parse(localStorage.getItem('user'));
+        const loggedUser = JSON.parse(localStorage.getItem('user') || '{}');
 
-        if (!token || !loggedUser) {
-            navigate('/login');
+        console.log("🏢 AdminLayout - Checking access:");
+        console.log("  - Token:", token ? "Yes" : "No");
+        console.log("  - User:", loggedUser);
+
+        // Kiểm tra token
+        if (!token) {
+            console.log("❌ No token, redirecting to login");
+            setLoading(false);
+            navigate('/login', { replace: true });
             return;
         }
 
-        const roles = loggedUser.roles || [];
-        const isAdmin = roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN');
+        // Kiểm tra role
+        const userRole = loggedUser.role || '';
+        console.log("  - User role:", userRole);
+
+        const isAdmin = userRole === 'ADMIN';
+        console.log("  - isAdmin:", isAdmin);
 
         if (!isAdmin) {
-            navigate('/');
+            console.log(`❌ Role ${userRole} is not ADMIN, redirecting to home`);
+            setLoading(false);
+            navigate('/', { replace: true });
             return;
         }
 
+        console.log("✅ Admin access granted");
         setUser(loggedUser);
+        setIsAuthorized(true);
+        setLoading(false);
+
     }, [navigate]);
+
+    // Nếu đang loading, hiển thị loading
+    if (loading) {
+        return (
+            <div className={styles.loadingContainer}>
+                <div className={styles.spinner}></div>
+                <p>Đang tải...</p>
+            </div>
+        );
+    }
+
+    // Nếu chưa được authorize, không render gì
+    if (!isAuthorized) {
+        return null;
+    }
 
     const handleLogout = () => {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         setUser(null);
+        setIsAuthorized(false);
         navigate('/login');
     };
-
-    // Data state
-    const [products, setProducts] = useState([]);
-    const [promotions, setPromotions] = useState([]);
-    const [employees, setEmployees] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [branchtable, setBranchtable] = useState([]);
-
-    // Modal state
-    const [modalType, setModalType] = useState('');
-    const [selectedItem, setSelectedItem] = useState(null);
-    const [refreshCallback, setRefreshCallback] = useState(null);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const openAddModal = (type) => {
         setModalType(`add${type}`);
@@ -280,7 +317,7 @@ export default function AdminLayout() {
                                     <div className={styles['user-avatar']}>
                                         {user.fullName ? user.fullName.charAt(0).toUpperCase() : user.username?.charAt(0).toUpperCase() || 'A'}
                                     </div>
-                                    <span className={styles['user-name']}>{user.fullName || user.username}</span>
+                                    <span className={styles['user-name']}>{user.fullName || user.username || 'Admin'}</span>
                                 </div>
                                 <button onClick={handleLogout} className={styles['logout-button']}>
                                     <LogOut size={18} />

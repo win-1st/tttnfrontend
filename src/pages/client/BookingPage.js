@@ -107,6 +107,7 @@ const BookingPage = () => {
         return availableSlots;
     };
 
+    // ========== SỬA WEBSOCKET CALLBACK ==========
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) return;
@@ -118,7 +119,7 @@ const BookingPage = () => {
                 webSocketService.setTableStatusCallback((data) => {
                     console.log('📡 BookingPage received table status:', data);
 
-                    // Cập nhật danh sách bàn
+                    // ✅ SỬA: Cập nhật đúng bàn trong danh sách
                     setAllTables(prevTables => {
                         const updated = prevTables.map(table =>
                             table.id === data.tableId
@@ -128,9 +129,10 @@ const BookingPage = () => {
                         return updated;
                     });
 
-                    // Refetch để đồng bộ
-                    if (data.status === 'RESERVED' || data.status === 'OCCUPIED') {
-                        setTimeout(() => fetchAllTables(), 500);
+                    // ✅ SỬA: Chỉ refetch khi cần thiết
+                    if (data.status === 'RESERVED' || data.status === 'OCCUPIED' || data.status === 'FREE') {
+                        // Refetch để đồng bộ dữ liệu
+                        setTimeout(() => fetchAllTables(), 1000);
                     }
                 });
 
@@ -221,16 +223,25 @@ const BookingPage = () => {
     const fetchAllTables = async () => {
         setLoadingTables(true);
         try {
-            const response = await axiosClient.get('/tables/status/FREE');
-            console.log('Tables response:', response.data);
+            // ✅ Gọi API /tables để lấy TẤT CẢ bàn
+            const response = await axiosClient.get('/tables');
+            console.log('All tables response:', response.data);
 
             if (response.data?.success) {
                 const tables = response.data.data || [];
                 setAllTables(tables);
+            } else {
+                setAllTables([]);
             }
         } catch (err) {
             console.error('Error fetching tables:', err);
-            setError('Không thể tải danh sách bàn. Vui lòng thử lại sau.');
+            if (err.response?.status === 401) {
+                // Nếu chưa đăng nhập, vẫn hiển thị thông báo
+                setError('Vui lòng đăng nhập để xem danh sách bàn và đặt bàn');
+            } else {
+                setError('Không thể tải danh sách bàn. Vui lòng thử lại sau.');
+            }
+            setAllTables([]);
         } finally {
             setLoadingTables(false);
         }
@@ -258,7 +269,7 @@ const BookingPage = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validate form
+        // ========== VALIDATE FORM ==========
         if (!formData.customerName.trim()) {
             setError('Vui lòng nhập tên khách hàng');
             return;
@@ -276,12 +287,26 @@ const BookingPage = () => {
             return;
         }
 
+        // ========== CHECK DATE ==========
+        const today = new Date().toISOString().split('T')[0];
+        if (formData.reservationDate < today) {
+            setError('Không thể đặt bàn trong quá khứ');
+            return;
+        }
+
+        // ========== CHECK TIME ==========
+        const hour = parseInt(formData.reservationTime.split(':')[0]);
+        if (hour < 6 || hour > 22) {
+            setError('Chỉ có thể đặt bàn từ 6h đến 22h');
+            return;
+        }
+
         setLoading(true);
         setError(null);
         setSuccess(null);
 
         try {
-            // Tạo dữ liệu đúng format
+            // ========== PREPARE DATA ==========
             const reservationData = {
                 customerName: formData.customerName.trim(),
                 customerPhone: formData.customerPhone.trim(),
@@ -292,20 +317,55 @@ const BookingPage = () => {
                 tableId: formData.tableId ? parseInt(formData.tableId) : null
             };
 
-            console.log('Sending booking data:', JSON.stringify(reservationData, null, 2));
+            console.log('📤 Sending booking data:', JSON.stringify(reservationData, null, 2));
 
+            // ========== SEND REQUEST ==========
             const response = await axiosClient.post('/reservations/create', reservationData);
-            console.log('Booking response:', response.data);
+            console.log('📥 Booking response:', response.data);
 
             if (response.data?.success) {
+                // ========== SHOW SUCCESS MESSAGE ==========
                 setSuccess('Đặt bàn thành công! Chúng tôi sẽ liên hệ xác nhận với bạn trong ít phút.');
 
-                // Cập nhật lại danh sách giờ đã đặt
+                // ========== 🆕 EMIT WEBSOCKET EVENT ==========
+                try {
+                    const reservationResult = response.data.data;
+
+                    // Kiểm tra WebSocket đã kết nối chưa
+                    if (webSocketService.client && webSocketService.client.active) {
+                        // Gửi event qua WebSocket để staff nhận được real-time
+                        webSocketService.client.publish({
+                            destination: '/app/reservation.new',
+                            body: JSON.stringify({
+                                tableId: reservationResult.tableId,
+                                tableNumber: reservationResult.tableNumber,
+                                customerName: reservationResult.customerName,
+                                customerPhone: reservationResult.customerPhone,
+                                reservationDate: reservationResult.reservationDate,
+                                reservationTime: reservationResult.reservationTime,
+                                numberOfGuests: reservationResult.numberOfGuests,
+                                status: 'RESERVED',
+                                createdAt: new Date().toISOString()
+                            })
+                        });
+                        console.log('📤 WebSocket: New reservation event emitted');
+                    } else {
+                        console.warn('⚠️ WebSocket not connected, cannot emit event');
+                    }
+                } catch (wsError) {
+                    console.warn('⚠️ WebSocket emit error:', wsError);
+                    // Không throw lỗi, vẫn cho phép đặt bàn thành công
+                }
+
+                // ========== UPDATE BOOKED SLOTS ==========
                 if (formData.tableId) {
                     const slots = await fetchBookedSlots(formData.tableId, formData.reservationDate);
                     setBookedSlots(slots);
+                    const newSlots = getAvailableTimeSlots(formData.reservationDate, formData.tableId);
+                    setAvailableTimeSlots(newSlots);
                 }
 
+                // ========== RESET FORM ==========
                 setFormData(prev => ({
                     ...prev,
                     reservationDate: '',
@@ -315,12 +375,18 @@ const BookingPage = () => {
                     tableId: null
                 }));
                 setSelectedTableNumber('');
+
+                // ========== REFRESH TABLES ==========
                 fetchAllTables();
+
             } else {
+                // ========== SHOW ERROR FROM RESPONSE ==========
                 setError(response.data?.message || 'Có lỗi xảy ra, vui lòng thử lại sau');
             }
+
         } catch (err) {
-            console.error('Booking error:', err);
+            // ========== HANDLE ERROR ==========
+            console.error('❌ Booking error:', err);
             console.error('Error response:', err.response);
             console.error('Error data:', err.response?.data);
 
@@ -422,27 +488,60 @@ const BookingPage = () => {
                             <div className="loading-tables">Đang tải...</div>
                         ) : (
                             <div className="tables-grid">
-                                {allTables.map(table => (
-                                    <div key={table.id} className="table-card">
-                                        <div className="table-card-header">
-                                            <span className="table-number">Bàn {table.number}</span>
-                                            {getTableStatusBadge(table.status)}
+                                {allTables.map(table => {
+                                    const isAvailable = table.status === 'FREE';
+                                    const isReserved = table.status === 'RESERVED';
+                                    const isOccupied = table.status === 'OCCUPIED';
+
+                                    return (
+                                        <div
+                                            key={table.id}
+                                            className={`table-card ${!isAvailable ? 'occupied' : ''}`}
+                                        >
+                                            <div className="table-card-header">
+                                                <span className="table-number">Bàn {table.number}</span>
+                                                {getTableStatusBadge(table.status)}
+                                            </div>
+                                            <div className="table-card-body">
+                                                <span className="table-capacity">
+                                                    <Users size={14} /> {table.capacity} chỗ
+                                                </span>
+                                                <span className="table-type">
+                                                    {getTableTypeIcon(table.type)}
+                                                    {getTableTypeLabel(table.type)}
+                                                </span>
+                                            </div>
+                                            {isAvailable ? (
+                                                <button
+                                                    className="book-btn"
+                                                    onClick={() => {
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            tableId: table.id,
+                                                            numberOfGuests: table.capacity || prev.numberOfGuests
+                                                        }));
+                                                        setSelectedTableNumber(table.number);
+                                                        document.querySelector('.booking-form')?.scrollIntoView({ behavior: 'smooth' });
+                                                    }}
+                                                >
+                                                    <Calendar size={16} /> Đặt bàn ngay
+                                                </button>
+                                            ) : isReserved ? (
+                                                <div className="table-status-message reserved">
+                                                    <Clock size={14} /> Đã có người đặt
+                                                </div>
+                                            ) : isOccupied ? (
+                                                <div className="table-status-message occupied">
+                                                    <Users size={14} /> Đang có khách
+                                                </div>
+                                            ) : null}
                                         </div>
-                                        <div className="table-card-body">
-                                            <span className="table-capacity">
-                                                <Users size={14} /> {table.capacity} chỗ
-                                            </span>
-                                            <span className="table-type">
-                                                {getTableTypeIcon(table.type)}
-                                                {getTableTypeLabel(table.type)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {allTables.length === 0 && (
+                                    );
+                                })}
+                                {allTables.length === 0 && !loadingTables && (
                                     <div className="no-tables">
-                                        <Table size={32} />
-                                        <p>Không có bàn trống nào</p>
+                                        <Table size={48} />
+                                        <p>Không có bàn nào</p>
                                     </div>
                                 )}
                             </div>

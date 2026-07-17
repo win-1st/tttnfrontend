@@ -608,3 +608,60 @@
     padding: 8px 12px;
     border-radius: 8px;
 }
+
+/* ========== THÊM VÀO BookingPage.css ========== */
+
+.table-status-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: 10px;
+}
+
+.table-status-message.reserved {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.table-status-message.occupied {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.book-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.book-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.table-card.occupied {
+    opacity: 0.85;
+    cursor: not-allowed;
+}
+
+.table-card.occupied:hover {
+    transform: none;
+    box-shadow: none;
+}
