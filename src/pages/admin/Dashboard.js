@@ -4,7 +4,8 @@ import {
     TrendingUp, DollarSign, ShoppingCart, Package, Table,
     RefreshCw, Coffee, Search, X, Award,
     Calendar, CheckCircle, Users, Clock, Percent,
-    ArrowUp, ArrowDown, Minus, Printer, Eye
+    ArrowUp, ArrowDown, Minus, Printer, Eye,
+    ChevronLeft, ChevronRight, Activity
 } from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import ToastNotification from '../employee/cashier/ToastNotification';
@@ -32,6 +33,16 @@ export default function Dashboard() {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [showOrderDetail, setShowOrderDetail] = useState(false);
     const [recentActivity, setRecentActivity] = useState([]);
+
+    // Pagination state for orders
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [totalItems, setTotalItems] = useState(0);
+
+    // Pagination state for activities
+    const [activityCurrentPage, setActivityCurrentPage] = useState(1);
+    const [activityItemsPerPage, setActivityItemsPerPage] = useState(5);
+    const [totalActivities, setTotalActivities] = useState(0);
 
     // Toast notification
     const showToast = (message, type = "info", duration = 3000) => {
@@ -111,8 +122,8 @@ export default function Dashboard() {
 
     // Format helpers
     const formatCurrency = (amount) => {
-        if (!amount || amount === 0) return "0đ";
-        return amount.toLocaleString('vi-VN') + 'đ';
+        if (!amount || amount === 0) return "0 ₫";
+        return amount.toLocaleString('vi-VN') + ' ₫';
     };
 
     const formatDate = (dateString) => {
@@ -125,6 +136,22 @@ export default function Dashboard() {
             hour: '2-digit',
             minute: '2-digit'
         });
+    };
+
+    const formatTimeAgo = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Vừa xong';
+        if (diffMins < 60) return `${diffMins} phút trước`;
+        if (diffHours < 24) return `${diffHours} giờ trước`;
+        if (diffDays < 7) return `${diffDays} ngày trước`;
+        return formatDate(dateString);
     };
 
     const getTableNumber = (order) => {
@@ -141,11 +168,54 @@ export default function Dashboard() {
         return statusMap[status] || { label: status, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
     };
 
+    // Pagination helpers for orders
+    const getCurrentPageData = () => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredOrders.slice(startIndex, endIndex);
+    };
+
+    const getTotalPages = () => {
+        return Math.ceil(filteredOrders.length / itemsPerPage);
+    };
+
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+        const tableElement = document.querySelector('.orders-table-container');
+        if (tableElement) {
+            tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    const handleItemsPerPageChange = (e) => {
+        setItemsPerPage(Number(e.target.value));
+        setCurrentPage(1);
+    };
+
+    // Pagination helpers for activities
+    const getCurrentActivities = () => {
+        const startIndex = (activityCurrentPage - 1) * activityItemsPerPage;
+        const endIndex = startIndex + activityItemsPerPage;
+        return recentActivity.slice(startIndex, endIndex);
+    };
+
+    const getTotalActivityPages = () => {
+        return Math.ceil(recentActivity.length / activityItemsPerPage);
+    };
+
+    const handleActivityPageChange = (page) => {
+        setActivityCurrentPage(page);
+    };
+
+    const handleActivityItemsPerPageChange = (e) => {
+        setActivityItemsPerPage(Number(e.target.value));
+        setActivityCurrentPage(1);
+    };
+
     // Main data fetch
     const fetchDashboardData = async () => {
         setLoading(true);
         try {
-            // Check token
             const token = localStorage.getItem('token');
             if (!token) {
                 showToast('Vui lòng đăng nhập lại', 'error');
@@ -153,12 +223,65 @@ export default function Dashboard() {
                 return;
             }
 
-            const startDate = getStartDateByTimeRange();
-            const endDate = getEndDateByTimeRange();
+            // Lấy năm hiện tại nếu timeRange là year
+            const currentYear = new Date().getFullYear();
+            const yearParam = timeRange === 'year' ? currentYear : null;
 
-            console.log('🔄 Fetching dashboard data...', { startDate, endDate });
+            console.log('🔄 Fetching dashboard data...', { timeRange, year: yearParam });
 
-            // 1. Fetch bills
+            // Gọi API dashboard overview với year
+            const overviewRes = await axiosClient.get('/dashboard/overview', {
+                params: {
+                    timeRange: timeRange,
+                    year: yearParam
+                }
+            });
+
+            console.log('📊 Overview response:', overviewRes.data);
+
+            // Gọi API order statistics với year
+            const orderStatsRes = await axiosClient.get('/dashboard/orders/statistics', {
+                params: {
+                    timeRange: timeRange,
+                    year: yearParam
+                }
+            });
+
+            console.log('📊 Order stats response:', orderStatsRes.data);
+
+            // Gọi API top products
+            const topProductsRes = await axiosClient.get('/dashboard/top-products', {
+                params: {
+                    limit: 10,
+                    timeRange: timeRange,
+                    year: yearParam
+                }
+            });
+
+            console.log('📊 Top products response:', topProductsRes.data);
+
+            // Gọi API recent activities
+            const activitiesRes = await axiosClient.get('/dashboard/recent-activities', {
+                params: {
+                    limit: 50
+                }
+            });
+
+            console.log('📊 Activities response:', activitiesRes.data);
+
+            // Gọi API table statistics
+            const tablesRes = await axiosClient.get('/dashboard/tables/statistics');
+
+            console.log('📊 Tables stats response:', tablesRes.data);
+
+            // Lấy danh sách sản phẩm
+            const productsRes = await axiosClient.get('/products');
+            let totalProducts = 0;
+            if (productsRes.data?.data) {
+                totalProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data.length : 0;
+            }
+
+            // Lấy danh sách bills để hiển thị bảng
             const billsRes = await axiosClient.get('/bills/all');
             let allBills = [];
             if (billsRes.data?.success && billsRes.data?.data) {
@@ -169,9 +292,10 @@ export default function Dashboard() {
                 allBills = billsRes.data.data;
             }
 
-            console.log(`📊 Found ${allBills.length} total bills`);
+            // Filter bills theo timeRange
+            const startDate = getStartDateByTimeRange();
+            const endDate = getEndDateByTimeRange();
 
-            // 2. Filter bills by date range and payment status
             const filteredBills = allBills.filter(bill => {
                 const billDate = new Date(bill.createdAt);
                 const isInRange = billDate >= startDate && billDate <= endDate;
@@ -181,107 +305,68 @@ export default function Dashboard() {
 
             console.log(`✅ ${filteredBills.length} paid bills in selected period`);
 
-            // 3. Calculate revenue
-            const periodRevenue = filteredBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
-            const totalOrders = filteredBills.length;
+            // Xử lý dữ liệu từ overview
+            if (overviewRes.data?.success && overviewRes.data?.data) {
+                const data = overviewRes.data.data;
+                setStats(prev => ({
+                    ...prev,
+                    totalProducts: totalProducts,
+                    periodRevenue: data.periodRevenue || 0,
+                    totalRevenue: data.totalRevenue || 0,
+                    totalOrders: data.totalOrders || 0,
+                    activeTables: data.activeTables || 0,
+                    growthRate: data.growthRate || 0,
+                    averageOrderValue: data.totalOrders > 0 ? (data.periodRevenue / data.totalOrders) : 0
+                }));
+            }
 
-            // 4. Calculate total revenue all time
-            const allPaidBills = allBills.filter(bill => bill.paymentStatus === 'PAID');
-            const totalRevenueAll = allPaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+            // Xử lý top products
+            if (topProductsRes.data?.success && topProductsRes.data?.data) {
+                const products = topProductsRes.data.data;
+                setTopProducts(products.map(p => ({
+                    productName: p.name,
+                    quantity: p.soldQuantity || 0,
+                    revenue: p.revenue || 0
+                })));
+            }
 
-            // 5. Calculate average order value
-            const averageOrderValue = totalOrders > 0 ? periodRevenue / totalOrders : 0;
+            // Xử lý recent activities
+            if (activitiesRes.data?.success && activitiesRes.data?.data) {
+                const activities = activitiesRes.data.data;
+                setRecentActivity(activities.map(a => ({
+                    ...a,
+                    message: a.content,
+                    time: a.time,
+                    amount: 0
+                })));
+                setTotalActivities(activities.length);
+            }
 
-            // 6. Calculate growth rate
-            let growthRate = 0;
-            if (timeRange === 'day' && periodRevenue > 0) {
-                const yesterdayStart = new Date(startDate);
-                yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-                const yesterdayEnd = new Date(endDate);
-                yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
-                const yesterdayBills = allBills.filter(bill => {
-                    const billDate = new Date(bill.createdAt);
-                    return billDate >= yesterdayStart && billDate <= yesterdayEnd && bill.paymentStatus === 'PAID';
-                });
-                const yesterdayRevenue = yesterdayBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
-                if (yesterdayRevenue > 0) {
-                    growthRate = ((periodRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
-                }
-            } else if (timeRange === 'week' && periodRevenue > 0) {
-                // Compare with previous week
-                const prevWeekStart = new Date(startDate);
-                prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-                const prevWeekEnd = new Date(endDate);
-                prevWeekEnd.setDate(prevWeekEnd.getDate() - 7);
-                const prevWeekBills = allBills.filter(bill => {
-                    const billDate = new Date(bill.createdAt);
-                    return billDate >= prevWeekStart && billDate <= prevWeekEnd && bill.paymentStatus === 'PAID';
-                });
-                const prevWeekRevenue = prevWeekBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
-                if (prevWeekRevenue > 0) {
-                    growthRate = ((periodRevenue - prevWeekRevenue) / prevWeekRevenue) * 100;
+            // Xử lý order statistics để lấy thông tin đơn hàng
+            if (orderStatsRes.data?.success && orderStatsRes.data?.data) {
+                const data = orderStatsRes.data.data;
+                // Cập nhật totalOrders từ order stats
+                if (data.totalOrders !== undefined) {
+                    setStats(prev => ({
+                        ...prev,
+                        totalOrders: data.totalOrders,
+                        averageOrderValue: data.totalOrders > 0 ? (data.revenueFromPaidOrders / data.totalOrders) : 0
+                    }));
                 }
             }
 
-            // 7. Calculate top products
-            const topProductsList = await calculateTopProductsFromBills(filteredBills);
-            setTopProducts(topProductsList);
-
-            // 8. Calculate top categories
-            const topCategoriesList = await calculateTopCategories(filteredBills);
-            setTopCategories(topCategoriesList);
-
-            // 9. Sort recent orders
+            // Xử lý bảng bills
             const sortedBills = [...filteredBills].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            setRecentOrders(sortedBills.slice(0, 20));
-            setFilteredOrders(sortedBills.slice(0, 20));
-
-            // 10. Fetch products count
-            let totalProducts = 0;
-            try {
-                const productsRes = await axiosClient.get('/products');
-                if (productsRes.data?.data) {
-                    totalProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data.length : 0;
-                }
-            } catch (err) {
-                console.error('❌ Error fetching products:', err);
-            }
-
-            // 11. Fetch active tables
-            let activeTables = 0;
-            try {
-                const tablesRes = await axiosClient.get('/tables');
-                if (tablesRes.data?.data) {
-                    const tables = Array.isArray(tablesRes.data.data) ? tablesRes.data.data : [];
-                    activeTables = tables.filter(t => t.status === 'OCCUPIED').length;
-                }
-            } catch (err) {
-                console.error('❌ Error fetching tables:', err);
-            }
-
-
-            // 13. Generate recent activity
-            const activities = generateRecentActivity(filteredBills);
-            setRecentActivity(activities);
-
-            // 14. Update stats
-            setStats({
-                totalProducts,
-                periodRevenue,
-                totalRevenue: totalRevenueAll,
-                totalOrders,
-                activeTables,
-                growthRate,
-                averageOrderValue
-            });
+            setRecentOrders(sortedBills.slice(0, 100));
+            setFilteredOrders(sortedBills.slice(0, 100));
+            setTotalItems(sortedBills.slice(0, 100).length);
+            setCurrentPage(1);
 
             console.log('✅ Dashboard data loaded successfully');
 
         } catch (error) {
             console.error('❌ Error fetching dashboard:', error);
             showToast('Không thể tải dữ liệu dashboard', 'error');
-
-            // If 401, redirect to login
             if (error.response?.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -292,90 +377,13 @@ export default function Dashboard() {
         }
     };
 
-    // Calculate top products
-    const calculateTopProductsFromBills = async (bills) => {
-        const dishStats = {};
-
-        for (const bill of bills) {
-            try {
-                const response = await axiosClient.get(`/bills/${bill.id}`);
-                if (response.data) {
-                    const items = response.data.data?.items || [];
-                    for (const item of items) {
-                        const dishName = item.name || item.productName || 'Món ăn';
-                        if (!dishStats[dishName]) {
-                            dishStats[dishName] = { quantity: 0, revenue: 0 };
-                        }
-                        dishStats[dishName].quantity += item.quantity || 1;
-                        dishStats[dishName].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
-                    }
-                }
-            } catch (err) {
-                console.error("❌ Error fetching bill detail:", err);
-            }
-        }
-
-        return Object.entries(dishStats)
-            .map(([name, stats]) => ({
-                productName: name,
-                quantity: stats.quantity,
-                revenue: stats.revenue
-            }))
-            .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 10);
-    };
-
-    // Calculate top categories
-    const calculateTopCategories = async (bills) => {
-        // This is a simplified version - in real app, you'd fetch from API
-        const categoryStats = {};
-
-        for (const bill of bills) {
-            try {
-                const response = await axiosClient.get(`/bills/${bill.id}`);
-                if (response.data) {
-                    const items = response.data.data?.items || [];
-                    for (const item of items) {
-                        const category = item.category || item.categoryName || 'Khác';
-                        if (!categoryStats[category]) {
-                            categoryStats[category] = { count: 0, revenue: 0 };
-                        }
-                        categoryStats[category].count += 1;
-                        categoryStats[category].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
-                    }
-                }
-            } catch (err) {
-                console.error("❌ Error fetching bill detail:", err);
-            }
-        }
-
-        return Object.entries(categoryStats)
-            .map(([name, stats]) => ({
-                categoryName: name,
-                count: stats.count,
-                revenue: stats.revenue
-            }))
-            .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 5);
-    };
-
-    // Generate recent activity
-    const generateRecentActivity = (bills) => {
-        return bills.slice(0, 10).map(bill => ({
-            id: bill.id,
-            type: 'order',
-            message: `Đơn hàng #${bill.id} tại bàn ${getTableNumber(bill)} đã được thanh toán`,
-            time: bill.createdAt,
-            amount: bill.totalAmount,
-            status: bill.paymentStatus
-        }));
-    };
-
     // Search handlers
     const handleSearch = (keyword) => {
         setSearchTerm(keyword);
         if (!keyword.trim()) {
             setFilteredOrders(recentOrders);
+            setTotalItems(recentOrders.length);
+            setCurrentPage(1);
             return;
         }
 
@@ -389,11 +397,15 @@ export default function Dashboard() {
             return false;
         });
         setFilteredOrders(filtered);
+        setTotalItems(filtered.length);
+        setCurrentPage(1);
     };
 
     const clearSearch = () => {
         setSearchTerm('');
         setFilteredOrders(recentOrders);
+        setTotalItems(recentOrders.length);
+        setCurrentPage(1);
     };
 
     // View order detail
@@ -415,9 +427,7 @@ export default function Dashboard() {
 
     // Print order
     const printOrder = (order) => {
-        // Implement print functionality
         showToast(`Đang in hóa đơn #${order.id}...`, 'info');
-        // In real app, you'd open a print window or generate PDF
     };
 
     // Load data on mount and timeRange change
@@ -504,7 +514,13 @@ export default function Dashboard() {
         }
     ];
 
-    const displayOrders = searchTerm ? filteredOrders : recentOrders;
+    // Get current page data
+    const currentOrders = getCurrentPageData();
+    const totalPages = getTotalPages();
+
+    // Get current activities
+    const currentActivities = getCurrentActivities();
+    const totalActivityPages = getTotalActivityPages();
 
     return (
         <div style={{ padding: '20px' }}>
@@ -679,10 +695,7 @@ export default function Dashboard() {
                                 <p style={{
                                     color: '#94a3b8',
                                     fontSize: '14px',
-                                    marginBottom: '8px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
+                                    marginBottom: '8px'
                                 }}>
                                     {card.label}
                                     {card.growth !== undefined && card.growth !== 0 && (
@@ -719,8 +732,8 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            {/* Recent Orders Table with Search */}
-            <div style={{
+            {/* Recent Orders Table with Search and Pagination */}
+            <div className="orders-table-container" style={{
                 background: '#1a1a2e',
                 border: '1px solid #2d2d3d',
                 borderRadius: '16px',
@@ -751,57 +764,95 @@ export default function Dashboard() {
                                 borderRadius: '12px',
                                 color: '#94a3b8'
                             }}>
-                                {displayOrders.length}
+                                {filteredOrders.length}
                             </span>
                         </h3>
 
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            background: '#2d2d3d',
-                            borderRadius: '8px',
-                            padding: '4px 12px',
-                            border: '1px solid #3d3d4d'
+                            gap: '12px',
+                            flexWrap: 'wrap'
                         }}>
-                            <Search size={18} color="#94a3b8" />
-                            <input
-                                type="text"
-                                placeholder="Tìm theo mã đơn, bàn..."
-                                value={searchTerm}
-                                onChange={(e) => handleSearch(e.target.value)}
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    outline: 'none',
-                                    color: 'white',
-                                    padding: '8px 0',
-                                    fontSize: '14px',
-                                    width: '250px'
-                                }}
-                            />
-                            {searchTerm && (
-                                <button
-                                    onClick={clearSearch}
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: '#2d2d3d',
+                                borderRadius: '8px',
+                                padding: '4px 12px',
+                                border: '1px solid #3d3d4d'
+                            }}>
+                                <Search size={18} color="#94a3b8" />
+                                <input
+                                    type="text"
+                                    placeholder="Tìm theo mã đơn, bàn..."
+                                    value={searchTerm}
+                                    onChange={(e) => handleSearch(e.target.value)}
                                     style={{
                                         background: 'transparent',
                                         border: 'none',
+                                        outline: 'none',
+                                        color: 'white',
+                                        padding: '8px 0',
+                                        fontSize: '14px',
+                                        width: '200px'
+                                    }}
+                                />
+                                {searchTerm && (
+                                    <button
+                                        onClick={clearSearch}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            color: '#94a3b8',
+                                            padding: '4px'
+                                        }}
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                color: '#94a3b8',
+                                fontSize: '13px'
+                            }}>
+                                <span>Hiển thị:</span>
+                                <select
+                                    value={itemsPerPage}
+                                    onChange={handleItemsPerPageChange}
+                                    style={{
+                                        background: '#2d2d3d',
+                                        color: 'white',
+                                        border: '1px solid #3d3d4d',
+                                        borderRadius: '6px',
+                                        padding: '6px 10px',
+                                        fontSize: '13px',
                                         cursor: 'pointer',
-                                        color: '#94a3b8',
-                                        padding: '4px'
+                                        outline: 'none'
                                     }}
                                 >
-                                    <X size={16} />
-                                </button>
-                            )}
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     {searchTerm && (
                         <div style={{ marginTop: '12px', fontSize: '13px', color: '#94a3b8' }}>
-                            Tìm thấy <strong style={{ color: '#ff6b6b' }}>{displayOrders.length}</strong> kết quả
+                            Tìm thấy <strong style={{ color: '#ff6b6b' }}>{filteredOrders.length}</strong> kết quả
                         </div>
                     )}
                 </div>
+
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
@@ -815,8 +866,8 @@ export default function Dashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {displayOrders.length > 0 ? (
-                                displayOrders.map(order => {
+                            {currentOrders.length > 0 ? (
+                                currentOrders.map(order => {
                                     const status = getStatusBadge(order.paymentStatus);
                                     return (
                                         <tr key={order.id} style={{ borderBottom: '1px solid #2d2d3d', transition: 'background 0.2s' }}
@@ -894,6 +945,98 @@ export default function Dashboard() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination for Orders */}
+                {filteredOrders.length > 0 && totalPages > 1 && (
+                    <div style={{
+                        padding: '16px 20px',
+                        borderTop: '1px solid #2d2d3d',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                    }}>
+                        <div style={{ color: '#94a3b8', fontSize: '13px' }}>
+                            Hiển thị {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredOrders.length)} trong tổng số {filteredOrders.length} hóa đơn
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                style={{
+                                    padding: '6px 12px',
+                                    background: currentPage === 1 ? 'transparent' : '#2d2d3d',
+                                    border: '1px solid #3d3d4d',
+                                    borderRadius: '6px',
+                                    color: currentPage === 1 ? '#64748b' : '#e2e8f0',
+                                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <ChevronLeft size={16} />
+                                Trước
+                            </button>
+
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    let pageNum;
+                                    if (totalPages <= 5) {
+                                        pageNum = i + 1;
+                                    } else if (currentPage <= 3) {
+                                        pageNum = i + 1;
+                                    } else if (currentPage >= totalPages - 2) {
+                                        pageNum = totalPages - 4 + i;
+                                    } else {
+                                        pageNum = currentPage - 2 + i;
+                                    }
+
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => handlePageChange(pageNum)}
+                                            style={{
+                                                padding: '6px 14px',
+                                                background: currentPage === pageNum ? '#ff6b6b' : 'transparent',
+                                                border: currentPage === pageNum ? 'none' : '1px solid #3d3d4d',
+                                                borderRadius: '6px',
+                                                color: currentPage === pageNum ? 'white' : '#e2e8f0',
+                                                cursor: 'pointer',
+                                                fontWeight: currentPage === pageNum ? '600' : '400',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                style={{
+                                    padding: '6px 12px',
+                                    background: currentPage === totalPages ? 'transparent' : '#2d2d3d',
+                                    border: '1px solid #3d3d4d',
+                                    borderRadius: '6px',
+                                    color: currentPage === totalPages ? '#64748b' : '#e2e8f0',
+                                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                Sau
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Two Column Layout: Top Products & Categories */}
@@ -976,7 +1119,7 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* Recent Activity */}
+            {/* Recent Activity with Pagination */}
             {recentActivity.length > 0 && (
                 <div style={{
                     background: '#1a1a2e',
@@ -985,40 +1128,241 @@ export default function Dashboard() {
                     overflow: 'hidden'
                 }}>
                     <div style={{ padding: '20px', borderBottom: '1px solid #2d2d3d' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Clock size={20} color="#F59E0B" /> Hoạt động gần đây
-                        </h3>
-                    </div>
-                    <div style={{ padding: '16px' }}>
-                        {recentActivity.map((activity, idx) => (
-                            <div key={idx} style={{
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '12px'
+                        }}>
+                            <h3 style={{
+                                fontSize: '18px',
+                                fontWeight: '600',
+                                color: 'white',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '10px 16px',
-                                borderBottom: idx < recentActivity.length - 1 ? '1px solid #2d2d3d' : 'none'
+                                gap: '8px'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{
-                                        width: '32px',
-                                        height: '32px',
-                                        background: 'rgba(245,158,11,0.1)',
-                                        borderRadius: '50%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                    }}>
-                                        <ShoppingCart size={14} color="#F59E0B" />
-                                    </div>
-                                    <div>
-                                        <div style={{ color: '#e2e8f0', fontSize: '14px' }}>{activity.message}</div>
-                                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>{formatDate(activity.time)}</div>
+                                <Activity size={20} color="#F59E0B" /> Hoạt động gần đây
+                                <span style={{
+                                    fontSize: '12px',
+                                    background: '#2d2d3d',
+                                    padding: '2px 10px',
+                                    borderRadius: '12px',
+                                    color: '#94a3b8'
+                                }}>
+                                    {recentActivity.length}
+                                </span>
+                            </h3>
+
+                            {recentActivity.length > activityItemsPerPage && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    color: '#94a3b8',
+                                    fontSize: '13px'
+                                }}>
+                                    <span>Hiển thị:</span>
+                                    <select
+                                        value={activityItemsPerPage}
+                                        onChange={handleActivityItemsPerPageChange}
+                                        style={{
+                                            background: '#2d2d3d',
+                                            color: 'white',
+                                            border: '1px solid #3d3d4d',
+                                            borderRadius: '6px',
+                                            padding: '6px 10px',
+                                            fontSize: '13px',
+                                            cursor: 'pointer',
+                                            outline: 'none'
+                                        }}
+                                    >
+                                        <option value={3}>3</option>
+                                        <option value={5}>5</option>
+                                        <option value={10}>10</option>
+                                        <option value={20}>20</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        <div style={{
+                            marginTop: '8px',
+                            fontSize: '12px',
+                            color: '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}>
+                            <Clock size={12} />
+                            <span>Hiển thị hoạt động mới nhất trước</span>
+                        </div>
+                    </div>
+
+                    <div style={{ padding: '16px' }}>
+                        {currentActivities.length > 0 ? (
+                            currentActivities.map((activity, idx) => (
+                                <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '12px 16px',
+                                    borderBottom: idx < currentActivities.length - 1 ? '1px solid #2d2d3d' : 'none',
+                                    transition: 'background 0.2s',
+                                    borderRadius: '8px'
+                                }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                                        <div style={{
+                                            width: '40px',
+                                            height: '40px',
+                                            background: 'rgba(16,185,129,0.1)',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            flexShrink: 0
+                                        }}>
+                                            <ShoppingCart size={18} color="#10B981" />
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{
+                                                color: '#e2e8f0',
+                                                fontSize: '14px',
+                                                fontWeight: '500',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>
+                                                {activity.message}
+                                            </div>
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '16px',
+                                                marginTop: '4px',
+                                                flexWrap: 'wrap'
+                                            }}>
+                                                <span style={{
+                                                    color: '#94a3b8',
+                                                    fontSize: '12px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}>
+                                                    <Clock size={12} />
+                                                    {formatTimeAgo(activity.time)}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <span style={{ color: '#10B981', fontWeight: '600' }}>{formatCurrency(activity.amount)}</span>
+                            ))
+                        ) : (
+                            <div style={{
+                                padding: '40px',
+                                textAlign: 'center',
+                                color: '#64748b'
+                            }}>
+                                <Activity size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                                <p>Chưa có hoạt động nào</p>
                             </div>
-                        ))}
+                        )}
                     </div>
+
+                    {/* Pagination for Activities */}
+                    {recentActivity.length > 0 && totalActivityPages > 1 && (
+                        <div style={{
+                            padding: '12px 20px',
+                            borderTop: '1px solid #2d2d3d',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '12px'
+                        }}>
+                            <div style={{ color: '#94a3b8', fontSize: '13px' }}>
+                                Hiển thị {((activityCurrentPage - 1) * activityItemsPerPage) + 1} - {Math.min(activityCurrentPage * activityItemsPerPage, recentActivity.length)} trong tổng số {recentActivity.length} hoạt động
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <button
+                                    onClick={() => handleActivityPageChange(activityCurrentPage - 1)}
+                                    disabled={activityCurrentPage === 1}
+                                    style={{
+                                        padding: '6px 12px',
+                                        background: activityCurrentPage === 1 ? 'transparent' : '#2d2d3d',
+                                        border: '1px solid #3d3d4d',
+                                        borderRadius: '6px',
+                                        color: activityCurrentPage === 1 ? '#64748b' : '#e2e8f0',
+                                        cursor: activityCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <ChevronLeft size={16} />
+                                    Trước
+                                </button>
+
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    {Array.from({ length: Math.min(5, totalActivityPages) }, (_, i) => {
+                                        let pageNum;
+                                        if (totalActivityPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (activityCurrentPage <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (activityCurrentPage >= totalActivityPages - 2) {
+                                            pageNum = totalActivityPages - 4 + i;
+                                        } else {
+                                            pageNum = activityCurrentPage - 2 + i;
+                                        }
+
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => handleActivityPageChange(pageNum)}
+                                                style={{
+                                                    padding: '6px 14px',
+                                                    background: activityCurrentPage === pageNum ? '#ff6b6b' : 'transparent',
+                                                    border: activityCurrentPage === pageNum ? 'none' : '1px solid #3d3d4d',
+                                                    borderRadius: '6px',
+                                                    color: activityCurrentPage === pageNum ? 'white' : '#e2e8f0',
+                                                    cursor: 'pointer',
+                                                    fontWeight: activityCurrentPage === pageNum ? '600' : '400',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <button
+                                    onClick={() => handleActivityPageChange(activityCurrentPage + 1)}
+                                    disabled={activityCurrentPage === totalActivityPages}
+                                    style={{
+                                        padding: '6px 12px',
+                                        background: activityCurrentPage === totalActivityPages ? 'transparent' : '#2d2d3d',
+                                        border: '1px solid #3d3d4d',
+                                        borderRadius: '6px',
+                                        color: activityCurrentPage === totalActivityPages ? '#64748b' : '#e2e8f0',
+                                        cursor: activityCurrentPage === totalActivityPages ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    Sau
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

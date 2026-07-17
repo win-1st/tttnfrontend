@@ -10,6 +10,7 @@ import {
     LineChart
 } from 'recharts';
 import styles from '../../layouts/AdminLayout.module.css';
+
 export default function Reports() {
     const [loading, setLoading] = useState(true);
     const [revenueData, setRevenueData] = useState([]);
@@ -44,6 +45,9 @@ export default function Reports() {
         setError(null);
 
         try {
+            console.log(`📊 Fetching data for year: ${selectedYear}`);
+
+            // Gọi API với tham số year và timeRange=year
             const [monthlyRevenueRes, overviewRes, orderStatsRes] = await Promise.all([
                 fetch(`${API_BASE_URL}/api/dashboard/revenue/monthly?year=${selectedYear}`, {
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
@@ -60,12 +64,16 @@ export default function Reports() {
             const overviewData = await overviewRes.json();
             const orderStatsData = await orderStatsRes.json();
 
-            console.log('Monthly Revenue Data:', monthlyRevenueData);
-            console.log('Overview Data:', overviewData);
-            console.log('Order Stats Data:', orderStatsData);
+            console.log('📊 Monthly Revenue Data:', monthlyRevenueData);
+            console.log('📊 Overview Data:', overviewData);
+            console.log('📊 Order Stats Data:', orderStatsData);
 
+            // Xử lý dữ liệu doanh thu tháng
             const monthNames = ['Thg 1', 'Thg 2', 'Thg 3', 'Thg 4', 'Thg 5', 'Thg 6', 'Thg 7', 'Thg 8', 'Thg 9', 'Thg 10', 'Thg 11', 'Thg 12'];
             const processedData = [];
+
+            // Kiểm tra xem có dữ liệu không
+            let hasData = false;
 
             if (monthlyRevenueData.success && monthlyRevenueData.data) {
                 const monthlyData = monthlyRevenueData.data;
@@ -73,6 +81,8 @@ export default function Reports() {
                 for (let i = 1; i <= 12; i++) {
                     const monthKey = `${String(i).padStart(2, '0')}/${selectedYear}`;
                     let revenue = monthlyData[monthKey] || 0;
+
+                    if (revenue > 0) hasData = true;
 
                     processedData.push({
                         month: monthNames[i - 1],
@@ -92,29 +102,50 @@ export default function Reports() {
                 }
             }
 
-            const currentMonth = new Date().getMonth() + 1;
+            // Nếu không có dữ liệu, hiển thị thông báo
+            if (!hasData) {
+                console.log(`⚠️ No revenue data for year ${selectedYear}`);
+            }
+
+            // Lấy 6 tháng gần đây (có dữ liệu hoặc 6 tháng cuối năm)
             let last6Months = [];
             if (selectedYear === currentYear) {
+                // Năm hiện tại: lấy các tháng đã qua
+                const currentMonth = new Date().getMonth() + 1;
                 last6Months = processedData.slice(0, currentMonth);
             } else {
+                // Năm khác: lấy 6 tháng cuối năm
                 last6Months = processedData.slice(-6);
             }
 
             setRevenueData(last6Months);
 
+            // Xử lý dữ liệu tổng quan
             if (overviewData.success && overviewData.data) {
-                setTotalRevenue(overviewData.data.totalRevenue || 0);
-                setTotalOrders(overviewData.data.totalOrders || 0);
+                const revenue = overviewData.data.totalRevenue || 0;
+                const orders = overviewData.data.totalOrders || 0;
+
+                console.log(`💰 Revenue for ${selectedYear}: ${revenue}`);
+                console.log(`📦 Orders for ${selectedYear}: ${orders}`);
+
+                setTotalRevenue(revenue);
+                setTotalOrders(orders);
                 setComparisonPercent(prev => ({
                     ...prev,
                     revenue: overviewData.data.growthRate || 0,
                     orders: overviewData.data.ordersGrowth || 0
                 }));
+            } else {
+                setTotalRevenue(0);
+                setTotalOrders(0);
+                setComparisonPercent({ revenue: 0, orders: 0, avgValue: 0 });
             }
 
+            // Xử lý thống kê trạng thái đơn hàng
             if (orderStatsData.success && orderStatsData.data) {
                 const stats = orderStatsData.data;
 
+                // Tính giá trị trung bình
                 const avgValue = stats.totalOrders > 0 ? (stats.revenueFromPaidOrders || totalRevenue) / stats.totalOrders : 0;
                 setAvgOrderValue(avgValue);
 
@@ -153,10 +184,13 @@ export default function Reports() {
                 }
 
                 setOrderStatusData(statusData);
+            } else {
+                setOrderStatusData([]);
+                setAvgOrderValue(0);
             }
 
         } catch (err) {
-            console.error('Lỗi khi lấy dữ liệu báo cáo:', err);
+            console.error('❌ Lỗi khi lấy dữ liệu báo cáo:', err);
             setError('Không thể kết nối đến máy chủ. Vui lòng thử lại sau!');
         } finally {
             setLoading(false);
@@ -164,7 +198,7 @@ export default function Reports() {
     };
 
     const formatCurrency = (value) => {
-        if (!value || value === 0) return '0đ';
+        if (!value || value === 0) return '0 ₫';
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
             currency: 'VND',
@@ -256,7 +290,7 @@ export default function Reports() {
                         animation: 'spin 1s linear infinite',
                         margin: '0 auto 16px'
                     }}></div>
-                    <p>Đang tải báo cáo...</p>
+                    <p>Đang tải báo cáo năm {selectedYear}...</p>
                 </div>
             </div>
         );
@@ -292,6 +326,7 @@ export default function Reports() {
     }
 
     const hasRevenueData = revenueData.length > 0 && revenueData.some(item => item.revenue > 0);
+    const hasOrderData = orderStatusData.length > 0;
 
     return (
         <div>
@@ -386,6 +421,24 @@ export default function Reports() {
                 </div>
             </div>
 
+            {/* Thông báo khi không có dữ liệu */}
+            {!hasRevenueData && !hasOrderData && (
+                <div style={{
+                    padding: '16px 20px',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid #F59E0B',
+                    borderRadius: '12px',
+                    marginBottom: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    color: '#F59E0B'
+                }}>
+                    <AlertCircle size={20} />
+                    <span>Chưa có dữ liệu cho năm <strong>{selectedYear}</strong>. Vui lòng chọn năm khác hoặc tạo đơn hàng.</span>
+                </div>
+            )}
+
             {/* Stats Cards */}
             <div style={{
                 display: 'grid',
@@ -399,24 +452,35 @@ export default function Reports() {
                             <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <DollarSign size={14} /> Tổng doanh thu ({selectedYear})
                             </p>
-                            <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0', color: 'var(--color-primary)' }}>
+                            <h3 style={{
+                                fontSize: '28px',
+                                fontWeight: '700',
+                                margin: '0 0 8px 0',
+                                color: totalRevenue > 0 ? 'var(--color-primary)' : 'var(--color-text-secondary)'
+                            }}>
                                 {formatCurrency(totalRevenue)}
                             </h3>
-                            <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.revenue >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
-                                <TrendingUp size={14} />
-                                {comparisonPercent.revenue >= 0 ? '+' : ''}{comparisonPercent.revenue}% so với năm trước
-                            </p>
+                            {totalRevenue > 0 ? (
+                                <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.revenue >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
+                                    <TrendingUp size={14} />
+                                    {comparisonPercent.revenue >= 0 ? '+' : ''}{comparisonPercent.revenue}% so với năm trước
+                                </p>
+                            ) : (
+                                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                                    Chưa có dữ liệu
+                                </p>
+                            )}
                         </div>
                         <div style={{
                             width: '48px',
                             height: '48px',
-                            background: 'rgba(212, 175, 55, 0.1)',
+                            background: totalRevenue > 0 ? 'rgba(212, 175, 55, 0.1)' : 'rgba(148, 163, 184, 0.1)',
                             borderRadius: '12px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}>
-                            <DollarSign size={24} color="var(--color-primary)" />
+                            <DollarSign size={24} color={totalRevenue > 0 ? 'var(--color-primary)' : 'var(--color-text-secondary)'} />
                         </div>
                     </div>
                 </div>
@@ -427,24 +491,35 @@ export default function Reports() {
                             <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <ShoppingCart size={14} /> Tổng đơn hàng ({selectedYear})
                             </p>
-                            <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0' }}>
+                            <h3 style={{
+                                fontSize: '28px',
+                                fontWeight: '700',
+                                margin: '0 0 8px 0',
+                                color: totalOrders > 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)'
+                            }}>
                                 {formatNumber(totalOrders)}
                             </h3>
-                            <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.orders >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
-                                <TrendingUp size={14} />
-                                {comparisonPercent.orders >= 0 ? '+' : ''}{comparisonPercent.orders}% so với năm trước
-                            </p>
+                            {totalOrders > 0 ? (
+                                <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.orders >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
+                                    <TrendingUp size={14} />
+                                    {comparisonPercent.orders >= 0 ? '+' : ''}{comparisonPercent.orders}% so với năm trước
+                                </p>
+                            ) : (
+                                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                                    Chưa có dữ liệu
+                                </p>
+                            )}
                         </div>
                         <div style={{
                             width: '48px',
                             height: '48px',
-                            background: 'rgba(59, 130, 246, 0.1)',
+                            background: totalOrders > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(148, 163, 184, 0.1)',
                             borderRadius: '12px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}>
-                            <ShoppingCart size={24} color="#3B82F6" />
+                            <ShoppingCart size={24} color={totalOrders > 0 ? '#3B82F6' : 'var(--color-text-secondary)'} />
                         </div>
                     </div>
                 </div>
@@ -455,24 +530,35 @@ export default function Reports() {
                             <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Percent size={14} /> Giá trị TB/Đơn
                             </p>
-                            <h3 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px 0' }}>
+                            <h3 style={{
+                                fontSize: '28px',
+                                fontWeight: '700',
+                                margin: '0 0 8px 0',
+                                color: avgOrderValue > 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)'
+                            }}>
                                 {formatCurrency(avgOrderValue)}
                             </h3>
-                            <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.avgValue >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
-                                <TrendingUp size={14} />
-                                {comparisonPercent.avgValue >= 0 ? '+' : ''}{comparisonPercent.avgValue}% so với năm trước
-                            </p>
+                            {avgOrderValue > 0 ? (
+                                <p style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: comparisonPercent.avgValue >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
+                                    <TrendingUp size={14} />
+                                    {comparisonPercent.avgValue >= 0 ? '+' : ''}{comparisonPercent.avgValue}% so với năm trước
+                                </p>
+                            ) : (
+                                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                                    Chưa có dữ liệu
+                                </p>
+                            )}
                         </div>
                         <div style={{
                             width: '48px',
                             height: '48px',
-                            background: 'rgba(139, 92, 246, 0.1)',
+                            background: avgOrderValue > 0 ? 'rgba(139, 92, 246, 0.1)' : 'rgba(148, 163, 184, 0.1)',
                             borderRadius: '12px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}>
-                            <BarChart3 size={24} color="#8B5CF6" />
+                            <BarChart3 size={24} color={avgOrderValue > 0 ? '#8B5CF6' : 'var(--color-text-secondary)'} />
                         </div>
                     </div>
                 </div>
@@ -492,7 +578,7 @@ export default function Reports() {
                             <TrendingUp size={18} color="var(--color-primary)" /> Doanh thu 6 tháng gần đây
                         </h3>
                         <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-                            Theo dõi xu hướng doanh thu
+                            {selectedYear === currentYear ? 'Theo dõi xu hướng doanh thu' : `Doanh thu 6 tháng cuối năm ${selectedYear}`}
                         </p>
                     </div>
                     {hasRevenueData ? (
@@ -526,7 +612,9 @@ export default function Reports() {
                         </ResponsiveContainer>
                     ) : (
                         <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: 'var(--color-text-secondary)', gap: '8px' }}>
+                            <AlertCircle size={32} />
                             <p>Không có dữ liệu doanh thu cho năm {selectedYear}</p>
+                            <p style={{ fontSize: '13px' }}>Vui lòng tạo đơn hàng hoặc chọn năm khác</p>
                         </div>
                     )}
                 </div>
@@ -541,7 +629,7 @@ export default function Reports() {
                             Phân bổ trạng thái đơn hàng
                         </p>
                     </div>
-                    {orderStatusData.length > 0 ? (
+                    {hasOrderData ? (
                         <>
                             <ResponsiveContainer width="100%" height={300}>
                                 <PieChart>
@@ -620,8 +708,10 @@ export default function Reports() {
                             </div>
                         </>
                     ) : (
-                        <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)' }}>
-                            Không có dữ liệu đơn hàng cho năm {selectedYear}
+                        <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: 'var(--color-text-secondary)', gap: '8px' }}>
+                            <AlertCircle size={32} />
+                            <p>Không có dữ liệu đơn hàng cho năm {selectedYear}</p>
+                            <p style={{ fontSize: '13px' }}>Vui lòng tạo đơn hàng hoặc chọn năm khác</p>
                         </div>
                     )}
                 </div>

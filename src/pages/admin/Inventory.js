@@ -53,10 +53,10 @@ export default function Inventory() {
 
     const getTransactionTypeIcon = (type) => {
         switch (type) {
-            case 'IMPORT': return <ArrowDown size={14} color="#10B981" />;
-            case 'EXPORT': return <ArrowUp size={14} color="#EF4444" />;
-            case 'ADJUSTMENT': return <RefreshCw size={14} color="#8B5CF6" />;
-            default: return <Package size={14} />;
+            case 'IMPORT': return <ArrowDown size={16} color="#10B981" />;
+            case 'EXPORT': return <ArrowUp size={16} color="#EF4444" />;
+            case 'ADJUSTMENT': return <RefreshCw size={16} color="#8B5CF6" />;
+            default: return <Package size={16} />;
         }
     };
 
@@ -214,7 +214,7 @@ export default function Inventory() {
     if (loading) return (
         <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
             <div style={{ width: '40px', height: '40px', border: '4px solid #2d2d3d', borderTop: '4px solid #ff6b6b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
-            <p>Đang tải dữ liệu...</p>
+            <p style={{ fontSize: 16 }}>Đang tải dữ liệu...</p>
             <style>{`
                 @keyframes spin {
                     to { transform: rotate(360deg); }
@@ -226,7 +226,7 @@ export default function Inventory() {
     const currentTransactions = getCurrentTransactions();
 
     return (
-        <div>
+        <div style={{ padding: '0 4px' }}>
             {/* Toast Notification */}
             {toast && (
                 <div style={{
@@ -246,16 +246,38 @@ export default function Inventory() {
                 </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+            {/* Header */}
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 24,
+                flexWrap: 'wrap',
+                gap: 12
+            }}>
                 <div>
-                    <h2 style={{ fontSize: 24, fontWeight: 700, color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Package size={24} /> Quản lý Kho
+                    <h2 style={{
+                        fontSize: 28,
+                        fontWeight: 700,
+                        color: '#ff6b6b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10
+                    }}>
+                        <Package size={28} /> Quản lý Kho
                     </h2>
-                    <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <List size={14} /> Tổng số giao dịch: {transactions.length}
+                    <p style={{
+                        color: '#94a3b8',
+                        fontSize: 15,
+                        marginTop: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <List size={16} /> Tổng số giao dịch: <strong style={{ color: '#e2e8f0' }}>{transactions.length}</strong>
                     </p>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                     <button onClick={fetchTransactions} style={btnSecondary}>
                         <RefreshCw size={18} /> Làm mới
                     </button>
@@ -270,11 +292,11 @@ export default function Inventory() {
                 background: '#1a1a2e',
                 borderRadius: 16,
                 border: '1px solid #2d2d3d',
-                padding: 20,
-                marginBottom: 20
+                padding: 24,
+                marginBottom: 24
             }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-                    <div style={{ minWidth: 140 }}>
+                    <div style={{ minWidth: 160 }}>
                         <label style={labelStyle}>Tìm theo</label>
                         <select
                             value={searchField}
@@ -289,11 +311,11 @@ export default function Inventory() {
                         </select>
                     </div>
 
-                    <div style={{ flex: 1, minWidth: 250 }}>
+                    <div style={{ flex: 1, minWidth: 280 }}>
                         <label style={labelStyle}>Tìm kiếm</label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div style={{ position: 'relative', flex: 1 }}>
-                                <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                                <Search size={20} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                                 <input
                                     type="text"
                                     value={searchTerm}
@@ -301,7 +323,8 @@ export default function Inventory() {
                                     placeholder={`Nhập từ khóa...`}
                                     style={{
                                         ...inputStyle,
-                                        paddingLeft: 40
+                                        paddingLeft: 44,
+                                        fontSize: 15
                                     }}
                                 />
                             </div>
@@ -309,7 +332,7 @@ export default function Inventory() {
                                 <button
                                     onClick={() => setSearchTerm('')}
                                     style={{
-                                        padding: '8px 12px',
+                                        padding: '10px 14px',
                                         background: '#2d2d3d',
                                         border: 'none',
                                         borderRadius: 8,
@@ -317,13 +340,13 @@ export default function Inventory() {
                                         cursor: 'pointer'
                                     }}
                                 >
-                                    <X size={16} />
+                                    <X size={18} />
                                 </button>
                             )}
                         </div>
                     </div>
 
-                    <div style={{ minWidth: 160 }}>
+                    <div style={{ minWidth: 180 }}>
                         <label style={labelStyle}>Loại giao dịch</label>
                         <select
                             value={transactionTypeFilter}
@@ -341,7 +364,7 @@ export default function Inventory() {
                         <button
                             onClick={resetFilters}
                             style={{
-                                padding: '10px 20px',
+                                padding: '11px 24px',
                                 background: '#2d2d3d',
                                 border: 'none',
                                 borderRadius: 8,
@@ -350,7 +373,9 @@ export default function Inventory() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
-                                marginBottom: 0
+                                marginBottom: 0,
+                                fontSize: 14,
+                                fontWeight: 500
                             }}
                         >
                             <Filter size={16} /> Xóa bộ lọc
@@ -360,18 +385,18 @@ export default function Inventory() {
 
                 {(searchTerm || transactionTypeFilter !== 'all') ? (
                     <div style={{
-                        marginTop: 16,
-                        padding: '8px 12px',
+                        marginTop: 18,
+                        padding: '10px 16px',
                         background: 'rgba(255,107,107,0.1)',
                         borderRadius: 8,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
-                        fontSize: 13,
+                        gap: 10,
+                        fontSize: 14,
                         color: '#94a3b8'
                     }}>
-                        <Search size={14} />
-                        Tìm thấy <strong style={{ color: '#ff6b6b' }}>{filteredTransactions.length}</strong> kết quả
+                        <Search size={16} />
+                        Tìm thấy <strong style={{ color: '#ff6b6b', fontSize: 16 }}>{filteredTransactions.length}</strong> kết quả
                         <button
                             onClick={resetFilters}
                             style={{
@@ -380,7 +405,8 @@ export default function Inventory() {
                                 border: 'none',
                                 color: '#ff6b6b',
                                 cursor: 'pointer',
-                                fontSize: 12
+                                fontSize: 13,
+                                fontWeight: 500
                             }}
                         >
                             [Xóa tìm kiếm]
@@ -388,25 +414,30 @@ export default function Inventory() {
                     </div>
                 ) : (
                     <div style={{
-                        marginTop: 16,
-                        fontSize: 12,
+                        marginTop: 18,
+                        fontSize: 14,
                         color: '#64748b',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8
                     }}>
-                        <Package size={14} />
-                        Tổng số giao dịch: <strong>{transactions.length}</strong>
+                        <Package size={16} />
+                        Tổng số giao dịch: <strong style={{ color: '#e2e8f0' }}>{transactions.length}</strong>
                     </div>
                 )}
             </div>
 
             {/* Bảng lịch sử */}
-            <div style={{ background: '#1a1a2e', borderRadius: 16, border: '1px solid #2d2d3d', overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
+            <div style={{
+                background: '#1a1a2e',
+                borderRadius: 16,
+                border: '1px solid #2d2d3d',
+                overflow: 'auto'
+            }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid #2d2d3d', background: '#0f0f1a' }}>
-                            <th style={th}><Hash size={12} /> ID</th>
+                            <th style={th}><Hash size={14} /> ID</th>
                             <th style={th}>Sản phẩm</th>
                             <th style={th}>Loại</th>
                             <th style={th}>SL</th>
@@ -421,11 +452,10 @@ export default function Inventory() {
                         {currentTransactions.length > 0 ? (
                             currentTransactions.map(tx => (
                                 <tr key={tx.id} style={{ borderBottom: '1px solid #2d2d3d' }}>
-                                    <td style={td}>#{tx.id}</td>
-                                    <td style={{ ...td, color: 'white', fontWeight: 500 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Package size={14} color="#64748B" />
-                                            {/* ✅ SỬA: Dùng tx.productName */}
+                                    <td style={{ ...td, fontWeight: 600, color: '#e2e8f0' }}>#{tx.id}</td>
+                                    <td style={{ ...td, color: 'white', fontWeight: 500, fontSize: 15 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Package size={16} color="#64748B" />
                                             {tx.productName || tx.product?.name || '-'}
                                         </div>
                                     </td>
@@ -435,20 +465,19 @@ export default function Inventory() {
                                             {getTransactionTypeText(tx.transactionType)}
                                         </span>
                                     </td>
-                                    <td style={{ ...td, color: 'white', fontWeight: 600 }}>{tx.quantity}</td>
+                                    <td style={{ ...td, color: 'white', fontWeight: 600, fontSize: 16 }}>{tx.quantity}</td>
                                     <td style={td}>{tx.beforeQuantity}</td>
                                     <td style={td}>{tx.afterQuantity}</td>
-                                    <td style={td}>{tx.note || '-'}</td>
+                                    <td style={{ ...td, color: '#e2e8f0' }}>{tx.note || '-'}</td>
                                     <td style={{ ...td }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <User size={14} color="#64748B" />
-                                            {/* ✅ SỬA: Dùng tx.userFullName */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <User size={16} color="#64748B" />
                                             {tx.userFullName || tx.user?.fullName || '-'}
                                         </div>
                                     </td>
                                     <td style={{ ...td }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Calendar size={14} color="#64748B" />
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Calendar size={16} color="#64748B" />
                                             {new Date(tx.createdAt).toLocaleString('vi-VN')}
                                         </div>
                                     </td>
@@ -456,10 +485,10 @@ export default function Inventory() {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={9} style={{ padding: 60, textAlign: 'center', color: '#94a3b8' }}>
-                                    <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                                    <p>Không tìm thấy giao dịch nào</p>
-                                    <p style={{ fontSize: 12, marginTop: 8 }}>Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc</p>
+                                <td colSpan={9} style={{ padding: 80, textAlign: 'center', color: '#94a3b8' }}>
+                                    <Package size={64} style={{ margin: '0 auto 20px', opacity: 0.3 }} />
+                                    <p style={{ fontSize: 18, fontWeight: 500 }}>Không tìm thấy giao dịch nào</p>
+                                    <p style={{ fontSize: 14, marginTop: 8 }}>Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc</p>
                                 </td>
                             </tr>
                         )}
@@ -473,14 +502,14 @@ export default function Inventory() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginTop: 20,
-                    padding: '12px 0',
+                    marginTop: 24,
+                    padding: '16px 0',
                     flexWrap: 'wrap',
                     gap: 12
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ color: '#94a3b8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <List size={14} /> Hiển thị:
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <span style={{ color: '#94a3b8', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <List size={16} /> Hiển thị:
                         </span>
                         <select
                             value={itemsPerPage}
@@ -493,8 +522,8 @@ export default function Inventory() {
                             <option value={50}>50</option>
                             <option value={100}>100</option>
                         </select>
-                        <span style={{ color: '#94a3b8', fontSize: 13 }}>
-                            / {filteredTransactions.length} giao dịch
+                        <span style={{ color: '#94a3b8', fontSize: 14 }}>
+                            / <strong style={{ color: '#e2e8f0' }}>{filteredTransactions.length}</strong> giao dịch
                         </span>
                     </div>
 
@@ -504,7 +533,7 @@ export default function Inventory() {
                             disabled={currentPage === 1}
                             style={paginationButtonStyle(currentPage === 1)}
                         >
-                            <ChevronLeft size={16} /> Trước
+                            <ChevronLeft size={18} /> Trước
                         </button>
 
                         {getPageNumbers().map(page => (
@@ -522,12 +551,12 @@ export default function Inventory() {
                             disabled={currentPage === totalPages}
                             style={paginationButtonStyle(currentPage === totalPages)}
                         >
-                            Sau <ChevronRight size={16} />
+                            Sau <ChevronRight size={18} />
                         </button>
                     </div>
 
-                    <div style={{ color: '#94a3b8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Grid size={14} /> Trang {currentPage} / {totalPages}
+                    <div style={{ color: '#94a3b8', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Grid size={16} /> Trang <strong style={{ color: '#e2e8f0' }}>{currentPage}</strong> / {totalPages}
                     </div>
                 </div>
             )}
@@ -536,18 +565,31 @@ export default function Inventory() {
             {showImportModal && (
                 <div style={overlayStyle} onClick={() => setShowImportModal(false)}>
                     <div style={modalStyle} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                            <h3 style={{ color: '#ff6b6b', fontSize: 20, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Truck size={20} /> Nhập kho
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
+                            <h3 style={{
+                                color: '#ff6b6b',
+                                fontSize: 24,
+                                margin: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10
+                            }}>
+                                <Truck size={24} /> Nhập kho
                             </h3>
-                            <button onClick={() => setShowImportModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
-                                <X size={24} />
+                            <button onClick={() => setShowImportModal(false)} style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#94a3b8',
+                                cursor: 'pointer',
+                                padding: 4
+                            }}>
+                                <X size={28} />
                             </button>
                         </div>
                         <form onSubmit={handleImport}>
-                            <div style={{ marginBottom: 16 }}>
+                            <div style={{ marginBottom: 18 }}>
                                 <label style={labelStyle}>
-                                    <Package size={14} style={{ display: 'inline', marginRight: 4 }} /> Sản phẩm *
+                                    <Package size={16} style={{ display: 'inline', marginRight: 6 }} /> Sản phẩm *
                                 </label>
                                 <select
                                     value={importForm.productId}
@@ -562,9 +604,9 @@ export default function Inventory() {
                                     ))}
                                 </select>
                             </div>
-                            <div style={{ marginBottom: 16 }}>
+                            <div style={{ marginBottom: 18 }}>
                                 <label style={labelStyle}>
-                                    <Box size={14} style={{ display: 'inline', marginRight: 4 }} /> Số lượng *
+                                    <Box size={16} style={{ display: 'inline', marginRight: 6 }} /> Số lượng *
                                 </label>
                                 <input
                                     type="number"
@@ -575,9 +617,9 @@ export default function Inventory() {
                                     placeholder="Nhập số lượng..."
                                 />
                             </div>
-                            <div style={{ marginBottom: 20 }}>
+                            <div style={{ marginBottom: 24 }}>
                                 <label style={labelStyle}>
-                                    <Clipboard size={14} style={{ display: 'inline', marginRight: 4 }} /> Ghi chú
+                                    <Clipboard size={16} style={{ display: 'inline', marginRight: 6 }} /> Ghi chú
                                 </label>
                                 <input
                                     type="text"
@@ -587,7 +629,7 @@ export default function Inventory() {
                                     placeholder="VD: Nhập hàng từ nhà cung cấp..."
                                 />
                             </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 12 }}>
                                 <button type="button" onClick={() => setShowImportModal(false)} style={btnCancel}>
                                     <X size={16} /> Hủy
                                 </button>
@@ -604,16 +646,30 @@ export default function Inventory() {
 }
 
 // ========== STYLES ==========
-const th = { padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' };
-const td = { padding: '12px 16px', color: '#94a3b8', fontSize: 13, whiteSpace: 'nowrap' };
+const th = {
+    padding: '14px 20px',
+    textAlign: 'left',
+    color: '#94a3b8',
+    fontWeight: 600,
+    fontSize: 15,
+    whiteSpace: 'nowrap'
+};
+
+const td = {
+    padding: '14px 20px',
+    color: '#94a3b8',
+    fontSize: 14,
+    whiteSpace: 'nowrap'
+};
 
 const btnPrimary = {
-    padding: '10px 20px',
+    padding: '12px 24px',
     background: '#ff6b6b',
     color: 'white',
     border: 'none',
     borderRadius: 10,
     fontWeight: 600,
+    fontSize: 15,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -622,12 +678,13 @@ const btnPrimary = {
 };
 
 const btnSecondary = {
-    padding: '10px 20px',
+    padding: '12px 24px',
     background: '#2d2d3d',
     color: 'white',
     border: 'none',
     borderRadius: 10,
     fontWeight: 600,
+    fontSize: 15,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -637,38 +694,41 @@ const btnSecondary = {
 
 const btnCancel = {
     flex: 1,
-    padding: 12,
+    padding: '14px 20px',
     background: '#2d2d3d',
     color: 'white',
     border: 'none',
     borderRadius: 10,
     fontWeight: 600,
+    fontSize: 15,
     cursor: 'pointer',
     transition: 'all 0.3s'
 };
 
 const btnConfirm = {
     flex: 1,
-    padding: 12,
+    padding: '14px 20px',
     background: '#ff6b6b',
     color: 'white',
     border: 'none',
     borderRadius: 10,
     fontWeight: 600,
+    fontSize: 15,
     cursor: 'pointer',
     transition: 'all 0.3s'
 };
 
 const badgeStyle = (type) => ({
-    padding: '4px 10px',
+    padding: '6px 14px',
     borderRadius: 20,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: 600,
-    background: type === 'IMPORT' ? 'rgba(16,185,129,0.1)' : type === 'EXPORT' ? 'rgba(239,68,68,0.1)' : 'rgba(139,92,246,0.1)',
+    background: type === 'IMPORT' ? 'rgba(16,185,129,0.15)' : type === 'EXPORT' ? 'rgba(239,68,68,0.15)' : 'rgba(139,92,246,0.15)',
     color: type === 'IMPORT' ? '#10B981' : type === 'EXPORT' ? '#EF4444' : '#8B5CF6',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 4
+    gap: 6,
+    border: `1px solid ${type === 'IMPORT' ? 'rgba(16,185,129,0.2)' : type === 'EXPORT' ? 'rgba(239,68,68,0.2)' : 'rgba(139,92,246,0.2)'}`
 });
 
 const overlayStyle = {
@@ -687,54 +747,55 @@ const overlayStyle = {
 const modalStyle = {
     background: '#1a1a2e',
     borderRadius: 16,
-    padding: 24,
-    width: 450,
-    maxWidth: '90%'
+    padding: 32,
+    width: 500,
+    maxWidth: '92%'
 };
 
 const labelStyle = {
     display: 'block',
     marginBottom: 8,
     color: '#94a3b8',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: 600
 };
 
 const inputStyle = {
     width: '100%',
-    padding: '10px',
+    padding: '12px 14px',
     background: '#0f0f1a',
     border: '1px solid #2d2d3d',
     borderRadius: 8,
     color: 'white',
-    fontSize: 14,
-    outline: 'none'
+    fontSize: 15,
+    outline: 'none',
+    transition: 'all 0.3s'
 };
 
 const selectStyle = {
     width: '100%',
-    padding: '10px',
+    padding: '12px 14px',
     background: '#0f0f1a',
     border: '1px solid #2d2d3d',
     borderRadius: 8,
     color: 'white',
-    fontSize: 14,
+    fontSize: 15,
     outline: 'none',
     cursor: 'pointer'
 };
 
 const selectSmallStyle = {
-    padding: '6px 12px',
+    padding: '8px 14px',
     background: '#0f0f1a',
     border: '1px solid #2d2d3d',
     borderRadius: 8,
     color: 'white',
-    fontSize: 13,
+    fontSize: 14,
     cursor: 'pointer'
 };
 
 const paginationButtonStyle = (disabled) => ({
-    padding: '8px 12px',
+    padding: '10px 16px',
     background: disabled ? '#2d2d3d' : '#ff6b6b',
     border: 'none',
     borderRadius: 8,
@@ -742,17 +803,20 @@ const paginationButtonStyle = (disabled) => ({
     cursor: disabled ? 'not-allowed' : 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    fontSize: 14,
+    fontWeight: 500,
     transition: 'all 0.3s'
 });
 
 const pageButtonStyle = (active) => ({
-    padding: '8px 16px',
+    padding: '10px 20px',
     background: active ? '#ff6b6b' : '#2d2d3d',
     border: 'none',
     borderRadius: 8,
     color: active ? 'white' : '#94a3b8',
     cursor: 'pointer',
     fontWeight: active ? 700 : 500,
+    fontSize: 14,
     transition: 'all 0.3s'
 });

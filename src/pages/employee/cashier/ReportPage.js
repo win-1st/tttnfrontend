@@ -7,6 +7,7 @@ import {
     RefreshCw, AlertCircle, CheckCircle, X
 } from "lucide-react";
 import * as XLSX from 'xlsx';
+import axiosClient from '../../../services/axiosClient';
 import ToastNotification from "./ToastNotification";
 import styles from "./ReportPage.module.css";
 
@@ -46,6 +47,17 @@ const ReportPage = () => {
         }, duration);
     };
 
+    // Kiểm tra token
+    const checkToken = () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showToast('Vui lòng đăng nhập lại', 'error');
+            setTimeout(() => window.location.href = '/login', 1500);
+            return false;
+        }
+        return true;
+    };
+
     useEffect(() => {
         if (reportType !== 'custom') {
             fetchReport();
@@ -63,7 +75,6 @@ const ReportPage = () => {
                     endDate: todayStr
                 };
             case 'weekly': {
-                // Lấy ngày đầu tuần (Thứ 2)
                 const dayOfWeek = today.getDay();
                 const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 const startOfWeek = new Date(today);
@@ -71,28 +82,17 @@ const ReportPage = () => {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                const startYear = startOfWeek.getFullYear();
-                const startMonth = String(startOfWeek.getMonth() + 1).padStart(2, '0');
-                const startDay = String(startOfWeek.getDate()).padStart(2, '0');
-                const endYear = endOfWeek.getFullYear();
-                const endMonth = String(endOfWeek.getMonth() + 1).padStart(2, '0');
-                const endDay = String(endOfWeek.getDate()).padStart(2, '0');
-
                 return {
-                    startDate: `${startYear}-${startMonth}-${startDay}`,
-                    endDate: `${endYear}-${endMonth}-${endDay}`
+                    startDate: formatDateToString(startOfWeek),
+                    endDate: formatDateToString(endOfWeek)
                 };
             }
             case 'monthly': {
-                const startYear = today.getFullYear();
-                const startMonth = String(today.getMonth() + 1).padStart(2, '0');
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                 const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                const endYear = endOfMonth.getFullYear();
-                const endMonth = String(endOfMonth.getMonth() + 1).padStart(2, '0');
-                const endDay = String(endOfMonth.getDate()).padStart(2, '0');
                 return {
-                    startDate: `${startYear}-${startMonth}-01`,
-                    endDate: `${endYear}-${endMonth}-${endDay}`
+                    startDate: formatDateToString(startOfMonth),
+                    endDate: formatDateToString(endOfMonth)
                 };
             }
             default:
@@ -100,94 +100,115 @@ const ReportPage = () => {
         }
     };
 
+    const formatDateToString = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const fetchReport = async () => {
+        if (!checkToken()) return;
+
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const { startDate, endDate } = getDateRangeByType();
 
-            console.log('Fetching report from:', startDate, 'to:', endDate);
+            console.log('📊 Fetching report from:', startDate, 'to:', endDate);
 
-            const response = await fetch(`http://localhost:8080/api/bills/all`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            // Sử dụng axiosClient thay vì fetch
+            const response = await axiosClient.get('/bills/all');
+            let allBills = [];
+            if (response.data?.success && response.data?.data) {
+                allBills = response.data.data;
+            } else if (Array.isArray(response.data)) {
+                allBills = response.data;
+            } else if (response.data?.data && Array.isArray(response.data.data)) {
+                allBills = response.data.data;
+            }
+
+            console.log(`📊 Total bills: ${allBills.length}`);
+
+            const filteredBills = allBills.filter(bill => {
+                if (!bill.createdAt) return false;
+                const billDate = new Date(bill.createdAt);
+                const year = billDate.getFullYear();
+                const month = String(billDate.getMonth() + 1).padStart(2, '0');
+                const day = String(billDate.getDate()).padStart(2, '0');
+                const billDateStr = `${year}-${month}-${day}`;
+                return billDateStr >= startDate && billDateStr <= endDate && bill.paymentStatus === 'PAID';
             });
 
-            if (response.ok) {
-                const result = await response.json();
-                let allBills = result.data || [];
+            console.log(`✅ ${filteredBills.length} bills in range`);
 
-                const filteredBills = allBills.filter(bill => {
-                    if (!bill.createdAt) return false;
-                    const billDate = new Date(bill.createdAt);
-                    const year = billDate.getFullYear();
-                    const month = String(billDate.getMonth() + 1).padStart(2, '0');
-                    const day = String(billDate.getDate()).padStart(2, '0');
-                    const billDateStr = `${year}-${month}-${day}`;
-                    return billDateStr >= startDate && billDateStr <= endDate && bill.paymentStatus === 'PAID';
-                });
+            const totalRevenue = filteredBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+            const totalOrders = filteredBills.length;
+            const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-                const totalRevenue = filteredBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-                const totalOrders = filteredBills.length;
-                const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+            const cashBills = filteredBills.filter(b => b.paymentMethod === 'CASH');
+            const momoBills = filteredBills.filter(b => b.paymentMethod === 'MOMO');
+            const bankingBills = filteredBills.filter(b => b.paymentMethod === 'BANKING' || b.paymentMethod === 'PAYOS');
 
-                const cashBills = filteredBills.filter(b => b.paymentMethod === 'CASH');
-                const momoBills = filteredBills.filter(b => b.paymentMethod === 'MOMO');
-                const bankingBills = filteredBills.filter(b => b.paymentMethod === 'BANKING' || b.paymentMethod === 'PAYOS');
+            const cashRevenue = cashBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+            const momoRevenue = momoBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+            const bankingRevenue = bankingBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
-                const cashRevenue = cashBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-                const momoRevenue = momoBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-                const bankingRevenue = bankingBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-
-                const dishStats = {};
-                for (const bill of filteredBills) {
-                    if (bill.id) {
-                        try {
-                            const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (detailResponse.ok) {
-                                const detailResult = await detailResponse.json();
-                                const items = detailResult.data?.items || [];
-                                for (const item of items) {
-                                    const dishName = item.name || item.product?.name || 'Món ăn';
-                                    if (!dishStats[dishName]) {
-                                        dishStats[dishName] = { quantity: 0, revenue: 0 };
-                                    }
-                                    dishStats[dishName].quantity += item.quantity || 1;
-                                    dishStats[dishName].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
+            // Tính top món ăn
+            const dishStats = {};
+            for (const bill of filteredBills) {
+                if (bill.id) {
+                    try {
+                        const detailResponse = await axiosClient.get(`/bills/${bill.id}`);
+                        if (detailResponse.data) {
+                            const items = detailResponse.data.data?.items || [];
+                            for (const item of items) {
+                                const dishName = item.name || item.product?.name || 'Món ăn';
+                                if (!dishStats[dishName]) {
+                                    dishStats[dishName] = { quantity: 0, revenue: 0 };
                                 }
+                                dishStats[dishName].quantity += item.quantity || 1;
+                                dishStats[dishName].revenue += (item.unitPrice || item.price || 0) * (item.quantity || 1);
                             }
-                        } catch (err) {
-                            console.error("Error fetching bill detail:", err);
                         }
+                    } catch (err) {
+                        console.error("Error fetching bill detail:", err);
                     }
                 }
-
-                const topDishes = Object.entries(dishStats)
-                    .map(([name, stats]) => ({ name, quantity: stats.quantity, revenue: stats.revenue }))
-                    .sort((a, b) => b.revenue - a.revenue)
-                    .slice(0, 5);
-
-                setReportData({
-                    totalRevenue,
-                    totalOrders,
-                    averageOrderValue,
-                    totalCustomers: filteredBills.length,
-                    cashCount: cashBills.length,
-                    cashRevenue,
-                    momoCount: momoBills.length,
-                    momoRevenue,
-                    bankingCount: bankingBills.length,
-                    bankingRevenue,
-                    topDishes,
-                    startDate,
-                    endDate,
-                    bills: filteredBills
-                });
             }
+
+            const topDishes = Object.entries(dishStats)
+                .map(([name, stats]) => ({ name, quantity: stats.quantity, revenue: stats.revenue }))
+                .sort((a, b) => b.revenue - a.revenue)
+                .slice(0, 5);
+
+            setReportData({
+                totalRevenue,
+                totalOrders,
+                averageOrderValue,
+                totalCustomers: filteredBills.length,
+                cashCount: cashBills.length,
+                cashRevenue,
+                momoCount: momoBills.length,
+                momoRevenue,
+                bankingCount: bankingBills.length,
+                bankingRevenue,
+                topDishes,
+                startDate,
+                endDate,
+                bills: filteredBills
+            });
+
         } catch (error) {
-            console.error("Error fetching report:", error);
-            showToast("Không thể tải dữ liệu báo cáo", "error");
+            console.error("❌ Error fetching report:", error);
+
+            if (error.response?.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error');
+                setTimeout(() => window.location.href = '/login', 1500);
+            } else {
+                showToast("Không thể tải dữ liệu báo cáo", "error");
+            }
         } finally {
             setLoading(false);
         }
@@ -195,19 +216,19 @@ const ReportPage = () => {
 
     // Hàm xuất Excel
     const handleExportExcel = async () => {
+        if (!checkToken()) return;
+
         setExporting(true);
         try {
-            const token = localStorage.getItem('token');
             const { startDate, endDate } = getDateRangeByType();
 
             let allBills = reportData?.bills || [];
             if (!reportData?.bills) {
-                const response = await fetch(`http://localhost:8080/api/bills/all`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.ok) {
-                    const result = await response.json();
-                    allBills = result.data || [];
+                const response = await axiosClient.get('/bills/all');
+                if (response.data?.success && response.data?.data) {
+                    allBills = response.data.data;
+                } else if (Array.isArray(response.data)) {
+                    allBills = response.data;
                 }
             }
 
@@ -229,16 +250,17 @@ const ReportPage = () => {
 
             const billsWithItems = [];
             for (const bill of filteredBills) {
-                const detailResponse = await fetch(`http://localhost:8080/api/bills/${bill.id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (detailResponse.ok) {
-                    const detailResult = await detailResponse.json();
-                    billsWithItems.push({
-                        ...bill,
-                        items: detailResult.data?.items || []
-                    });
-                } else {
+                try {
+                    const detailResponse = await axiosClient.get(`/bills/${bill.id}`);
+                    if (detailResponse.data) {
+                        billsWithItems.push({
+                            ...bill,
+                            items: detailResponse.data.data?.items || []
+                        });
+                    } else {
+                        billsWithItems.push({ ...bill, items: [] });
+                    }
+                } catch (err) {
                     billsWithItems.push({ ...bill, items: [] });
                 }
             }
@@ -266,7 +288,7 @@ const ReportPage = () => {
             ];
 
             const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-            summarySheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
+            summarySheet['!cols'] = [{ wch: 30 }, { wch: 25 }];
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Tổng hợp');
 
             // Sheet 2: Danh sách hóa đơn
@@ -282,7 +304,7 @@ const ReportPage = () => {
                 ])
             ];
             const billsSheet = XLSX.utils.aoa_to_sheet(billsData);
-            billsSheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 14 }, { wch: 20 }];
+            billsSheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 16 }, { wch: 22 }];
             XLSX.utils.book_append_sheet(workbook, billsSheet, 'Danh sách hóa đơn');
 
             // Sheet 3: Chi tiết món ăn
@@ -294,12 +316,12 @@ const ReportPage = () => {
                         item.name || item.product?.name || 'Món',
                         item.quantity,
                         formatCurrency(item.unitPrice || item.price),
-                        formatCurrency((item.unitPrice || item.price) * item.quantity)
+                        formatCurrency((item.unitPrice || item.price || 0) * (item.quantity || 1))
                     ])
                 )
             ];
             const itemsSheet = XLSX.utils.aoa_to_sheet(itemsData);
-            itemsSheet['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+            itemsSheet['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 18 }];
             XLSX.utils.book_append_sheet(workbook, itemsSheet, 'Chi tiết món ăn');
 
             XLSX.writeFile(workbook, `bao_cao_doanh_thu_${startDate}_den_${endDate}.xlsx`);
@@ -339,8 +361,8 @@ const ReportPage = () => {
     };
 
     const formatCurrency = (amount) => {
-        if (!amount) return "0đ";
-        return amount.toLocaleString('vi-VN') + 'đ';
+        if (!amount || amount === 0) return "0 ₫";
+        return amount.toLocaleString('vi-VN') + ' ₫';
     };
 
     const formatDateTimeVietnam = (dateString) => {
@@ -365,7 +387,7 @@ const ReportPage = () => {
             </div>
 
             <div className={styles.header}>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2>
                     <BarChart3 size={24} /> Báo cáo doanh thu
                 </h2>
                 {reportData && (
@@ -412,10 +434,10 @@ const ReportPage = () => {
                     </div>
                 )}
 
-                {reportType !== 'custom' && (
+                {reportType !== 'custom' && reportData && (
                     <div className={styles.reportInfo}>
                         <span className={styles.dateRangeInfo}>
-                            {reportData && `Từ ${formatDateVietnam(reportData.startDate)} → ${formatDateVietnam(reportData.endDate)}`}
+                            Từ {formatDateVietnam(reportData.startDate)} → {formatDateVietnam(reportData.endDate)}
                         </span>
                     </div>
                 )}
@@ -432,7 +454,7 @@ const ReportPage = () => {
                 <>
                     <div className={styles.summaryCards}>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>
+                            <div className={styles.cardIcon} style={{ background: 'rgba(16,185,129,0.15)' }}>
                                 <DollarSign size={28} color="#10B981" />
                             </div>
                             <div className={styles.cardInfo}>
@@ -441,7 +463,7 @@ const ReportPage = () => {
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>
+                            <div className={styles.cardIcon} style={{ background: 'rgba(59,130,246,0.15)' }}>
                                 <FileText size={28} color="#3B82F6" />
                             </div>
                             <div className={styles.cardInfo}>
@@ -450,7 +472,7 @@ const ReportPage = () => {
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>
+                            <div className={styles.cardIcon} style={{ background: 'rgba(139,92,246,0.15)' }}>
                                 <TrendingUp size={28} color="#8B5CF6" />
                             </div>
                             <div className={styles.cardInfo}>
@@ -459,7 +481,7 @@ const ReportPage = () => {
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
-                            <div className={styles.cardIcon}>
+                            <div className={styles.cardIcon} style={{ background: 'rgba(245,158,11,0.15)' }}>
                                 <Users size={28} color="#F59E0B" />
                             </div>
                             <div className={styles.cardInfo}>
@@ -470,7 +492,7 @@ const ReportPage = () => {
                     </div>
 
                     <div className={styles.paymentBreakdown}>
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3>
                             <CreditCard size={20} /> Chi tiết theo hình thức thanh toán
                         </h3>
                         <table className={styles.breakdownTable}>
@@ -484,7 +506,7 @@ const ReportPage = () => {
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <td>
                                         <DollarSign size={16} /> Tiền mặt
                                     </td>
                                     <td>{reportData.cashCount || 0}</td>
@@ -492,7 +514,7 @@ const ReportPage = () => {
                                     <td>{reportData.totalRevenue > 0 ? ((reportData.cashRevenue / reportData.totalRevenue) * 100).toFixed(1) : 0}%</td>
                                 </tr>
                                 <tr>
-                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <td>
                                         <Smartphone size={16} /> MoMo
                                     </td>
                                     <td>{reportData.momoCount || 0}</td>
@@ -500,7 +522,7 @@ const ReportPage = () => {
                                     <td>{reportData.totalRevenue > 0 ? ((reportData.momoRevenue / reportData.totalRevenue) * 100).toFixed(1) : 0}%</td>
                                 </tr>
                                 <tr>
-                                    <td style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <td>
                                         <Landmark size={16} /> Chuyển khoản/Thẻ
                                     </td>
                                     <td>{reportData.bankingCount || 0}</td>
@@ -513,7 +535,7 @@ const ReportPage = () => {
 
                     {reportData.topDishes?.length > 0 && (
                         <div className={styles.topDishes}>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3>
                                 <Award size={20} color="#EF4444" /> Top món bán chạy
                             </h3>
                             <div className={styles.dishesList}>
