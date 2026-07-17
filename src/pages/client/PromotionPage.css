@@ -449,3 +449,23 @@
         font-size: 18px;
     }
 }
+
+.status-active {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.status-upcoming {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.status-expired {
+    color: #6b7280;
+    background: rgba(107, 114, 128, 0.1);
+}
+
+.status-inactive {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}

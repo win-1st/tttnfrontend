@@ -255,31 +255,72 @@ const TableDetail = () => {
             console.log("=== FETCH PROMOTIONS WITH PRODUCTS ===");
 
             const response = await axiosClient.get('/promotions/active');
-            const activePromotions = response.data?.data || [];
-            console.log("Active promotions:", activePromotions);
+            let activePromotions = response.data?.data || [];
+            console.log("Active promotions from API:", activePromotions);
+
+            // ✅ THÊM LỌC LẠI Ở FRONTEND - ĐẢM BẢO CHỈ LẤY KHUYẾN MÃI CÒN HIỆU LỰC
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            activePromotions = activePromotions.filter(promo => {
+                // Kiểm tra isActive
+                if (!promo.isActive) {
+                    console.log(`❌ Skipping ${promo.name}: isActive = false`);
+                    return false;
+                }
+
+                // Kiểm tra startDate
+                if (promo.startDate) {
+                    const startDate = new Date(promo.startDate);
+                    if (startDate > today) {
+                        console.log(`❌ Skipping ${promo.name}: startDate = ${promo.startDate} > today`);
+                        return false;
+                    }
+                }
+
+                // ✅ KIỂM TRA ENDDATE - QUAN TRỌNG
+                if (promo.endDate) {
+                    const endDate = new Date(promo.endDate);
+                    if (endDate < today) {
+                        console.log(`❌ Skipping ${promo.name}: endDate = ${promo.endDate} < today (EXPIRED)`);
+                        return false;
+                    }
+                }
+
+                console.log(`✅ Promotion ${promo.name} is valid`);
+                return true;
+            });
+
+            console.log("Active promotions after frontend filter:", activePromotions);
 
             const map = {};
 
             for (const promo of activePromotions) {
                 console.log(`Fetching products for promotion ${promo.id} - ${promo.name}`);
-                const productRes = await axiosClient.get(`/promotions/${promo.id}/products`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const products = productRes.data?.data || [];
-                console.log(`Products in promotion ${promo.name}:`, products);
-
-                products.forEach(product => {
-                    if (!map[product.id]) {
-                        map[product.id] = [];
-                    }
-                    map[product.id].push({
-                        promotionId: promo.id,
-                        promotionName: promo.name,
-                        discountType: promo.discountPercentage ? 'percentage' : 'amount',
-                        discountValue: promo.discountPercentage || promo.discountAmount,
-                        isActive: promo.isActive
+                try {
+                    const productRes = await axiosClient.get(`/promotions/${promo.id}/products`, {
+                        headers: { Authorization: `Bearer ${token}` }
                     });
-                });
+                    const products = productRes.data?.data || [];
+                    console.log(`Products in promotion ${promo.name}:`, products);
+
+                    products.forEach(product => {
+                        if (!map[product.id]) {
+                            map[product.id] = [];
+                        }
+                        map[product.id].push({
+                            promotionId: promo.id,
+                            promotionName: promo.name,
+                            discountType: promo.discountPercentage ? 'percentage' : 'amount',
+                            discountValue: promo.discountPercentage || promo.discountAmount,
+                            isActive: promo.isActive,
+                            startDate: promo.startDate,   // ✅ Thêm startDate
+                            endDate: promo.endDate,       // ✅ Thêm endDate
+                        });
+                    });
+                } catch (err) {
+                    console.error(`Error fetching products for promotion ${promo.id}:`, err);
+                }
             }
 
             console.log("Final promotionProductsMap:", map);
@@ -542,7 +583,26 @@ const TableDetail = () => {
     const fetchPromotions = useCallback(async () => {
         try {
             const res = await axiosClient.get('/promotions/active');
-            setPromotions(res.data?.data || []);
+            const now = new Date();
+
+            // Lọc khuyến mãi còn hiệu lực
+            const validPromotions = (res.data?.data || []).filter(promo => {
+                // Chỉ lấy khuyến mãi đang active
+                if (!promo.isActive) return false;
+
+                // Kiểm tra ngày hết hạn
+                if (promo.endDate) {
+                    const endDate = new Date(promo.endDate);
+                    // Nếu endDate < now => đã hết hạn
+                    return endDate >= now;
+                }
+
+                // Không có endDate => coi như còn hiệu lực
+                return true;
+            });
+
+            setPromotions(validPromotions);
+            console.log('Khuyến mãi còn hiệu lực:', validPromotions.length);
         } catch (err) {
             console.error('Lỗi tải KM:', err);
         }
@@ -560,7 +620,44 @@ const TableDetail = () => {
             return originalPrice;
         }
 
-        const promo = promotions[0];
+        // ✅ LỌC BỎ KHUYẾN MÃI ĐÃ HẾT HẠN
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const validPromotions = promotions.filter(promo => {
+            // Kiểm tra isActive
+            if (promo.isActive === false) {
+                console.log(`❌ Promotion ${promo.promotionName} is inactive`);
+                return false;
+            }
+
+            // Kiểm tra startDate
+            if (promo.startDate) {
+                const startDate = new Date(promo.startDate);
+                if (startDate > today) {
+                    console.log(`❌ Promotion ${promo.promotionName} not started yet`);
+                    return false;
+                }
+            }
+
+            // ✅ KIỂM TRA ENDDATE - QUAN TRỌNG
+            if (promo.endDate) {
+                const endDate = new Date(promo.endDate);
+                if (endDate < today) {
+                    console.log(`❌ Promotion ${promo.promotionName} EXPIRED on ${promo.endDate}`);
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if (validPromotions.length === 0) {
+            console.log(`❌ No valid promotions for product ${product.id}`);
+            return originalPrice;
+        }
+
+        const promo = validPromotions[0];
         console.log(`✅ Áp dụng khuyến mãi: ${promo.promotionName}`);
         console.log(`Loại giảm: ${promo.discountType === 'percentage' ? 'Giảm %' : 'Giảm tiền'}`);
         console.log(`Giá trị giảm: ${promo.discountValue}`);
@@ -576,7 +673,6 @@ const TableDetail = () => {
 
         return discountedPrice;
     };
-
     const getDiscountedPriceForProduct = (product) => {
         const originalPrice = product.productTypeCode === "TIME_BASED"
             ? product.pricePerMinute || 0
@@ -585,7 +681,33 @@ const TableDetail = () => {
         const promotions = promotionProductsMap[product.id];
         if (!promotions || promotions.length === 0) return null;
 
-        const promo = promotions[0];
+        // ✅ LỌC BỎ KHUYẾN MÃI ĐÃ HẾT HẠN
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const validPromotions = promotions.filter(promo => {
+            if (promo.isActive === false) return false;
+
+            if (promo.startDate) {
+                const startDate = new Date(promo.startDate);
+                if (startDate > today) return false;
+            }
+
+            // ✅ KIỂM TRA ENDDATE - QUAN TRỌNG
+            if (promo.endDate) {
+                const endDate = new Date(promo.endDate);
+                if (endDate < today) {
+                    console.log(`❌ Promotion ${promo.promotionName} EXPIRED on ${promo.endDate}`);
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if (validPromotions.length === 0) return null;
+
+        const promo = validPromotions[0];
         let discountedPrice = originalPrice;
 
         if (promo.discountType === 'percentage') {
@@ -695,28 +817,16 @@ const TableDetail = () => {
             ? product.pricePerMinute || 0
             : product.price || 0;
 
-        const discountedPrice = calculateDiscountedPrice(product, originalPrice);
-        const hasDiscount = discountedPrice < originalPrice;
+        // ✅ Sử dụng hàm đã được sửa để kiểm tra endDate
+        const discountInfo = getDiscountedPriceForProduct(product);
+        const hasDiscount = discountInfo !== null && discountInfo.discountedPrice < originalPrice;
 
-        // ✅ Lấy thông tin khuyến mãi
-        let discountInfo = null;
-        if (hasDiscount) {
-            const promotions = promotionProductsMap[product.id];
-            if (promotions && promotions.length > 0) {
-                const promo = promotions[0];
-                discountInfo = {
-                    type: promo.discountType, // 'percentage' hoặc 'amount'
-                    value: promo.discountValue,
-                    name: promo.promotionName
-                };
-            }
-        }
+        // ✅ Nếu có discountInfo hợp lệ thì dùng giá giảm, không thì dùng giá gốc
+        const finalPrice = hasDiscount ? discountInfo.discountedPrice : originalPrice;
 
         if (hasDiscount) {
-            const promotions = promotionProductsMap[product.id];
-            const promoName = promotions?.[0]?.promotionName || 'Khuyến mãi';
-            const savedAmount = originalPrice - discountedPrice;
-            showToast(`${product.name} được giảm ${savedAmount.toLocaleString("vi-VN")}đ (${promoName})`, "success", 2000);
+            const savedAmount = originalPrice - finalPrice;
+            showToast(`${product.name} được giảm ${savedAmount.toLocaleString("vi-VN")}đ (${discountInfo.promotionName})`, "success", 2000);
         }
 
         setCart(prev => {
@@ -727,17 +837,28 @@ const TableDetail = () => {
                     item.id === product.id ? {
                         ...item,
                         quantity: item.quantity + 1,
-                        discountInfo: discountInfo || item.discountInfo // ✅ Giữ thông tin giảm giá
+                        price: finalPrice, // ✅ Cập nhật giá mới
+                        originalPrice: originalPrice,
+                        discountApplied: hasDiscount,
+                        discountInfo: hasDiscount ? {
+                            type: discountInfo.discountType,
+                            value: discountInfo.discountValue,
+                            name: discountInfo.promotionName
+                        } : null
                     } : item
                 );
             }
             return [...prev, {
                 id: product.id,
                 name: product.name,
-                price: discountedPrice,
+                price: finalPrice,
                 originalPrice: originalPrice,
                 discountApplied: hasDiscount,
-                discountInfo: discountInfo, // ✅ Lưu thông tin giảm giá
+                discountInfo: hasDiscount ? {
+                    type: discountInfo.discountType,
+                    value: discountInfo.discountValue,
+                    name: discountInfo.promotionName
+                } : null,
                 quantity: 1,
                 productTypeCode: product.productTypeCode,
                 isTimeBased: product.productTypeCode === "TIME_BASED",
@@ -1997,29 +2118,51 @@ const TableDetail = () => {
                                 </div>
                             ) : (
                                 <div className={styles.promoList}>
-                                    {promotions.map(promo => (
-                                        <div
-                                            key={promo.id}
-                                            onClick={() => { setSelectedPromotion(promo); setShowPromoModal(false); }}
-                                            className={`${styles.promoItem} ${selectedPromotion?.id === promo.id ? styles.promoItemSelected : ''}`}
-                                        >
-                                            <div className={styles.promoItemContent}>
-                                                <div className={styles.promoItemName}>
-                                                    <Tag size={16} /> {promo.name}
+                                    {promotions.map(promo => {
+                                        const endDate = promo.endDate ? new Date(promo.endDate) : null;
+                                        const isExpired = endDate ? endDate < new Date() : false;
+                                        const daysRemaining = endDate ? Math.ceil((endDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
+                                        return (
+                                            <div
+                                                key={promo.id}
+                                                onClick={() => {
+                                                    if (!isExpired) {
+                                                        setSelectedPromotion(promo);
+                                                        setShowPromoModal(false);
+                                                    }
+                                                }}
+                                                className={`${styles.promoItem} ${selectedPromotion?.id === promo.id ? styles.promoItemSelected : ''
+                                                    } ${isExpired ? styles.promoItemExpired : ''}`}
+                                            >
+                                                <div className={styles.promoItemContent}>
+                                                    <div className={styles.promoItemName}>
+                                                        <Tag size={16} /> {promo.name}
+                                                    </div>
+                                                    {promo.description && (
+                                                        <p className={styles.promoItemDesc}>{promo.description}</p>
+                                                    )}
+                                                    {endDate && !isExpired && (
+                                                        <p className={styles.promoItemExpiry}>
+                                                            ⏰ Còn {daysRemaining} ngày
+                                                        </p>
+                                                    )}
+                                                    {isExpired && (
+                                                        <p className={styles.promoItemExpiredText}>
+                                                            ❌ Đã hết hạn
+                                                        </p>
+                                                    )}
                                                 </div>
-                                                {promo.description && (
-                                                    <p className={styles.promoItemDesc}>{promo.description}</p>
-                                                )}
+                                                <span className={styles.promoItemDiscount}>
+                                                    {promo.discountPercentage
+                                                        ? `-${promo.discountPercentage}%`
+                                                        : promo.discountAmount
+                                                            ? `-${promo.discountAmount.toLocaleString("vi-VN")}đ`
+                                                            : ''}
+                                                </span>
                                             </div>
-                                            <span className={styles.promoItemDiscount}>
-                                                {promo.discountPercentage
-                                                    ? `-${promo.discountPercentage}%`
-                                                    : promo.discountAmount
-                                                        ? `-${promo.discountAmount.toLocaleString("vi-VN")}đ`
-                                                        : ''}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

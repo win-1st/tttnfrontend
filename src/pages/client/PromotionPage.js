@@ -4,7 +4,8 @@ import {
     Gift, Calendar, Tag, Clock, ChevronRight,
     Percent, Sparkles, Star, Award, Cake,
     Smartphone, Trophy, Zap, ShoppingBag,
-    CheckCircle, Clock as ClockIcon, AlertCircle
+    CheckCircle, Clock as ClockIcon, AlertCircle,
+    XCircle, Info, RefreshCw
 } from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 import './PromotionPage.css';
@@ -13,6 +14,7 @@ const PromotionPage = () => {
     const [promotions, setPromotions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('active');
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         fetchPromotions();
@@ -20,22 +22,30 @@ const PromotionPage = () => {
 
     const fetchPromotions = async () => {
         setLoading(true);
+        setError(null);
         try {
-            const response = await axiosClient.get('/promotions/active');
-            console.log('Promotions response:', response.data);
+            // Lấy TẤT CẢ khuyến mãi (bao gồm cả sắp diễn ra và đã kết thúc)
+            const response = await axiosClient.get('/promotions');
+            console.log('📦 All promotions response:', response.data);
 
             if (response.data?.success) {
                 const data = response.data.data || [];
-                console.log('Number of promotions:', data.length);
-                if (data.length > 0) {
-                    console.log('Sample promotion:', data[0]);
-                }
+
+                // Log chi tiết để debug
+                console.log(`📊 Total promotions: ${data.length}`);
+                data.forEach((promo, index) => {
+                    const status = getPromotionStatus(promo);
+                    console.log(`  ${index + 1}. ${promo.name} - ${status.label} (${promo.startDate || 'N/A'} -> ${promo.endDate || 'N/A'})`);
+                });
+
                 setPromotions(data);
             } else {
                 setPromotions([]);
+                setError('Không thể tải danh sách khuyến mãi');
             }
         } catch (err) {
-            console.error('Error fetching promotions:', err);
+            console.error('❌ Error fetching promotions:', err);
+            setError(err.response?.data?.message || 'Lỗi kết nối đến server');
             setPromotions([]);
         } finally {
             setLoading(false);
@@ -45,25 +55,29 @@ const PromotionPage = () => {
     // Format ngày tháng
     const formatDate = (dateString) => {
         if (!dateString) return 'Đang cập nhật';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('vi-VN');
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('vi-VN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        } catch {
+            return dateString;
+        }
     };
 
-    // Format loại giảm giá - Dựa vào cấu trúc dữ liệu thực tế
+    // Format loại giảm giá
     const formatDiscount = (promotion) => {
-        // Kiểm tra discountPercentage từ model
         if (promotion.discountPercentage) {
             return `Giảm ${promotion.discountPercentage}%`;
         }
-        // Kiểm tra discountAmount từ model
         if (promotion.discountAmount) {
             return `Giảm ${promotion.discountAmount.toLocaleString('vi-VN')}đ`;
         }
-        // Kiểm tra discountPercent
         if (promotion.discountPercent) {
             return `Giảm ${promotion.discountPercent}%`;
         }
-        // Nếu có discountValue
         if (promotion.discountValue) {
             if (promotion.discountType === 'PERCENTAGE' || promotion.discountType === 'PERCENT') {
                 return `Giảm ${promotion.discountValue}%`;
@@ -83,46 +97,113 @@ const PromotionPage = () => {
         return promotion.description || promotion.promoDescription || 'Ưu đãi hấp dẫn dành cho bạn';
     };
 
-    // Lấy icon cho khuyến mãi
+    // Lấy icon cho khuyến mãi dựa trên loại giảm giá
     const getPromotionIcon = (promotion) => {
-        const discount = promotion.discountPercentage || promotion.discountPercent || 0;
-        if (discount > 0) {
+        if (promotion.discountPercentage || promotion.discountPercent) {
             return <Percent size={20} />;
         }
-        if (promotion.discountAmount > 0) {
+        if (promotion.discountAmount || promotion.discountValue) {
             return <Gift size={20} />;
         }
         return <Sparkles size={20} />;
     };
 
-    // Kiểm tra khuyến mãi có đang diễn ra không
-    const isPromotionActive = (promotion) => {
+    // Kiểm tra trạng thái khuyến mãi CHI TIẾT
+    const getPromotionStatus = (promotion) => {
         const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        if (promotion.startDate && promotion.endDate) {
-            const startDate = new Date(promotion.startDate);
-            const endDate = new Date(promotion.endDate);
-            return promotion.isActive !== false && now >= startDate && now <= endDate;
+        // Nếu không active
+        if (promotion.isActive === false) {
+            return {
+                status: 'inactive',
+                label: 'Đã tắt',
+                icon: <XCircle size={14} />,
+                color: '#ef4444'
+            };
         }
 
-        return promotion.isActive !== false;
+        // Kiểm tra startDate
+        if (promotion.startDate) {
+            const startDate = new Date(promotion.startDate);
+            const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+
+            if (startDay > today) {
+                return {
+                    status: 'upcoming',
+                    label: 'Sắp diễn ra',
+                    icon: <ClockIcon size={14} />,
+                    color: '#f59e0b'
+                };
+            }
+        }
+
+        // Kiểm tra endDate
+        if (promotion.endDate) {
+            const endDate = new Date(promotion.endDate);
+            const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+            if (endDay < today) {
+                return {
+                    status: 'expired',
+                    label: 'Đã kết thúc',
+                    icon: <AlertCircle size={14} />,
+                    color: '#6b7280'
+                };
+            }
+        }
+
+        // Đang diễn ra
+        return {
+            status: 'active',
+            label: 'Đang diễn ra',
+            icon: <CheckCircle size={14} />,
+            color: '#10b981'
+        };
+    };
+
+    // Kiểm tra khuyến mãi có đang diễn ra không
+    const isPromotionActive = (promotion) => {
+        const status = getPromotionStatus(promotion);
+        return status.status === 'active';
+    };
+
+    // Kiểm tra khuyến mãi sắp diễn ra
+    const isPromotionUpcoming = (promotion) => {
+        const status = getPromotionStatus(promotion);
+        return status.status === 'upcoming';
+    };
+
+    // Kiểm tra khuyến mãi đã kết thúc
+    const isPromotionExpired = (promotion) => {
+        const status = getPromotionStatus(promotion);
+        return status.status === 'expired' || status.status === 'inactive';
     };
 
     // Lọc khuyến mãi theo tab
     const filteredPromotions = promotions.filter(promo => {
+        // Luôn filter bỏ những promotion có isActive = false
+        if (promo.isActive === false) return false;
+
         if (activeTab === 'active') {
             return isPromotionActive(promo);
         }
         if (activeTab === 'upcoming') {
-            if (promo.startDate) {
-                const now = new Date();
-                const startDate = new Date(promo.startDate);
-                return now < startDate && promo.isActive !== false;
-            }
-            return false;
+            return isPromotionUpcoming(promo);
         }
-        return true;
+        if (activeTab === 'expired') {
+            return isPromotionExpired(promo);
+        }
+        return true; // 'all'
     });
+
+    // Đếm số lượng theo từng trạng thái
+    const counts = {
+        active: promotions.filter(p => p.isActive !== false && isPromotionActive(p)).length,
+        upcoming: promotions.filter(p => p.isActive !== false && isPromotionUpcoming(p)).length,
+        expired: promotions.filter(p => p.isActive !== false && isPromotionExpired(p)).length,
+        all: promotions.filter(p => p.isActive !== false).length
+    };
 
     // Benefits data
     const benefits = [
@@ -150,8 +231,31 @@ const PromotionPage = () => {
         );
     }
 
+    if (error) {
+        return (
+            <div className="promotion-page">
+                <div className="promotion-hero">
+                    <h1>
+                        <Tag size={32} className="hero-icon" />
+                        Khuyến mãi & Ưu đãi
+                    </h1>
+                    <p>Những ưu đãi hấp dẫn dành riêng cho bạn</p>
+                </div>
+                <div className="error-state">
+                    <AlertCircle size={48} className="error-icon" />
+                    <p className="error-title">Không thể tải dữ liệu</p>
+                    <p className="error-subtitle">{error}</p>
+                    <button className="retry-btn" onClick={fetchPromotions}>
+                        <RefreshCw size={16} /> Thử lại
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="promotion-page">
+            {/* Hero Section */}
             <div className="promotion-hero">
                 <h1>
                     <Tag size={32} className="hero-icon" />
@@ -161,7 +265,7 @@ const PromotionPage = () => {
             </div>
 
             <div className="promotion-container">
-                {/* Tab navigation */}
+                {/* Tab navigation với số lượng */}
                 <div className="promotion-tabs">
                     <button
                         className={`tab-btn ${activeTab === 'active' ? 'active' : ''}`}
@@ -169,6 +273,7 @@ const PromotionPage = () => {
                     >
                         <Zap size={16} />
                         Đang diễn ra
+                        {counts.active > 0 && <span className="tab-count">{counts.active}</span>}
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'upcoming' ? 'active' : ''}`}
@@ -176,6 +281,15 @@ const PromotionPage = () => {
                     >
                         <ClockIcon size={16} />
                         Sắp diễn ra
+                        {counts.upcoming > 0 && <span className="tab-count">{counts.upcoming}</span>}
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'expired' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('expired')}
+                    >
+                        <AlertCircle size={16} />
+                        Đã kết thúc
+                        {counts.expired > 0 && <span className="tab-count">{counts.expired}</span>}
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
@@ -183,56 +297,104 @@ const PromotionPage = () => {
                     >
                         <ShoppingBag size={16} />
                         Tất cả
+                        {counts.all > 0 && <span className="tab-count">{counts.all}</span>}
                     </button>
                 </div>
 
+                {/* Danh sách khuyến mãi */}
                 {filteredPromotions.length === 0 ? (
                     <div className="empty-promotions">
                         <Gift size={56} className="empty-icon" />
-                        <p className="empty-title">Hiện chưa có chương trình khuyến mãi nào</p>
+                        <p className="empty-title">
+                            {activeTab === 'active' && 'Hiện không có khuyến mãi nào đang diễn ra'}
+                            {activeTab === 'upcoming' && 'Hiện không có khuyến mãi nào sắp diễn ra'}
+                            {activeTab === 'expired' && 'Hiện không có khuyến mãi nào đã kết thúc'}
+                            {activeTab === 'all' && 'Hiện chưa có chương trình khuyến mãi nào'}
+                        </p>
                         <p className="empty-subtitle">
                             Vui lòng quay lại sau để cập nhật ưu đãi mới nhất
                         </p>
                     </div>
                 ) : (
                     <div className="promotions-grid">
-                        {filteredPromotions.map(promo => (
-                            <div key={promo.id} className="promotion-card">
-                                <div className="promotion-badge">
-                                    {getPromotionIcon(promo)}
-                                    <span>{formatDiscount(promo)}</span>
-                                </div>
-                                <div className="promotion-content">
-                                    <h3>{getPromotionName(promo)}</h3>
-                                    <p>{getPromotionDescription(promo)}</p>
-                                    <div className="promotion-footer">
-                                        <div className="promotion-date">
-                                            <Calendar size={14} />
-                                            <span>
-                                                {promo.startDate && promo.endDate ? (
-                                                    `${formatDate(promo.startDate)} - ${formatDate(promo.endDate)}`
-                                                ) : (
-                                                    'Áp dụng đến khi có thông báo mới'
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div className="promotion-status">
-                                            {isPromotionActive(promo) ? (
-                                                <span className="status-active">
-                                                    <CheckCircle size={12} />
-                                                    Đang diễn ra
+                        {filteredPromotions.map(promo => {
+                            const status = getPromotionStatus(promo);
+                            const isActive = status.status === 'active';
+                            const isUpcoming = status.status === 'upcoming';
+                            const isExpired = status.status === 'expired' || status.status === 'inactive';
+
+                            return (
+                                <div
+                                    key={promo.id}
+                                    className={`promotion-card ${status.status}`}
+                                >
+                                    {/* Badge giảm giá */}
+                                    <div className="promotion-badge" style={{
+                                        background: isActive ? '#10b981' :
+                                            isUpcoming ? '#f59e0b' :
+                                                '#6b7280'
+                                    }}>
+                                        {getPromotionIcon(promo)}
+                                        <span>{formatDiscount(promo)}</span>
+                                    </div>
+
+                                    {/* Nội dung */}
+                                    <div className="promotion-content">
+                                        <h3>{getPromotionName(promo)}</h3>
+                                        <p>{getPromotionDescription(promo)}</p>
+
+                                        {/* Thời gian */}
+                                        <div className="promotion-footer">
+                                            <div className="promotion-date">
+                                                <Calendar size={14} />
+                                                <span>
+                                                    {promo.startDate && promo.endDate ? (
+                                                        `${formatDate(promo.startDate)} - ${formatDate(promo.endDate)}`
+                                                    ) : promo.startDate ? (
+                                                        `Bắt đầu: ${formatDate(promo.startDate)}`
+                                                    ) : promo.endDate ? (
+                                                        `Đến: ${formatDate(promo.endDate)}`
+                                                    ) : (
+                                                        'Áp dụng đến khi có thông báo mới'
+                                                    )}
                                                 </span>
-                                            ) : (
-                                                <span className="status-upcoming">
-                                                    <ClockIcon size={12} />
-                                                    Sắp diễn ra
+                                            </div>
+
+                                            {/* Trạng thái */}
+                                            <div className="promotion-status">
+                                                <span
+                                                    className={`status-${status.status}`}
+                                                    style={{ color: status.color }}
+                                                >
+                                                    {status.icon}
+                                                    {status.label}
                                                 </span>
-                                            )}
+                                            </div>
                                         </div>
+
+                                        {/* Hiển thị thời gian còn lại (chỉ cho đang diễn ra) */}
+                                        {isActive && promo.endDate && (
+                                            <div className="promotion-remaining">
+                                                <ClockIcon size={12} />
+                                                <span>
+                                                    Còn {Math.ceil((new Date(promo.endDate) - new Date()) / (1000 * 60 * 60 * 24))} ngày
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {/* Hiển thị thời gian còn lại đến khi bắt đầu (cho sắp diễn ra) */}
+                                        {isUpcoming && promo.startDate && (
+                                            <div className="promotion-remaining upcoming">
+                                                <ClockIcon size={12} />
+                                                <span>
+                                                    Còn {Math.ceil((new Date(promo.startDate) - new Date()) / (1000 * 60 * 60 * 24))} ngày nữa
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
@@ -241,6 +403,7 @@ const PromotionPage = () => {
                     <div className="benefits-header">
                         <Award size={32} className="benefits-icon" />
                         <h2>Đặc quyền thành viên</h2>
+                        <p>Trở thành thành viên để nhận nhiều ưu đãi hấp dẫn</p>
                     </div>
                     <div className="benefits-grid">
                         {benefits.map((benefit, index) => (
